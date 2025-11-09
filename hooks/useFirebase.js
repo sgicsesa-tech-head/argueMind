@@ -39,7 +39,6 @@ export const useGameState = () => {
 
   useEffect(() => {
     const unsubscribe = FirebaseService.subscribeToGameState((data) => {
-      console.log('Game state updated:', data);
       setGameState(data);
       setLoading(false);
     });

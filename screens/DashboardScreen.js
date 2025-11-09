@@ -128,10 +128,6 @@ const DashboardScreen = ({ navigation }) => {
                 <Text style={styles.statLabel}>Round 2 Score</Text>
                 <Text style={styles.statValue}>{userProfile.round2Score || 0}</Text>
               </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statLabel}>Total Score</Text>
-                <Text style={styles.statValue}>{userProfile.totalScore || 0}</Text>
-              </View>
             </View>
             {userProfile.qualified && (
               <View style={styles.qualifiedBadge}>

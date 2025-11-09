@@ -18,6 +18,10 @@ const GameScreen = ({ navigation, route }) => {
   const { roundNumber } = route.params || { roundNumber: 1 };
   const { user, gameState, loading: firebaseLoading } = useFirebase();
   
+  // Constants
+  const TIMER_DURATION = 90; // 90 seconds
+  const QUESTIONS_TOTAL = 20;
+
   // Game state
   const [userAnswer, setUserAnswer] = useState('');
   const [isAnswered, setIsAnswered] = useState(false);
@@ -30,31 +34,18 @@ const GameScreen = ({ navigation, route }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  // Sample questions data (you'll replace this with your actual data)
-  const questions = [
-    {
-      id: 1,
-      word: 'ELEPHANT',
-      imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Elephant+Image',
-    },
-    {
-      id: 2,
-      word: 'BUTTERFLY',
-      imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Butterfly+Image',
-    },
-    {
-      id: 3,
-      word: 'COMPUTER',
-      imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Computer+Image',
-    },
-    {
-      id: 4,
-      word: 'RAINBOW',
-      imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Rainbow+Image',
-    },
-    // Add more questions up to 20...
-  ];
+  // Timer state - get from gameState
+  const timeLeft = gameState?.timeRemaining || TIMER_DURATION;
   
+  // State for questions data loaded from JSON
+  const [questionsData, setQuestionsData] = useState(null);
+  const [currentQuestion, setCurrentQuestion] = useState(null);
+  
+  // Load questions data on mount
+  useEffect(() => {
+    loadQuestionsData();
+  }, []);
+
   // Load user profile and set up real-time listeners
   useEffect(() => {
     if (user) {
@@ -64,7 +55,10 @@ const GameScreen = ({ navigation, route }) => {
 
   // Listen to game state changes for question updates
   useEffect(() => {
-    if (gameState) {
+    if (gameState && questionsData) {
+      // Load current question when game state or questions data changes
+      loadCurrentQuestion();
+      
       // Reset answer state when question changes
       if (gameState.currentQuestion !== userProfile?.lastAnsweredQuestion) {
         setUserAnswer('');
@@ -74,7 +68,34 @@ const GameScreen = ({ navigation, route }) => {
         setLastSubmittedAnswer('');
       }
     }
-  }, [gameState?.currentQuestion]);
+  }, [gameState?.currentQuestion, questionsData]);
+
+  const loadQuestionsData = async () => {
+    try {
+      const result = await FirebaseService.loadQuestionsData();
+      if (result.success) {
+        setQuestionsData(result.data);
+      } else {
+        console.error('Failed to load questions:', result.error);
+        Alert.alert('Error', 'Failed to load questions data');
+      }
+    } catch (error) {
+      console.error('Error loading questions:', error);
+    }
+  };
+
+  const loadCurrentQuestion = async () => {
+    try {
+      if (gameState?.currentRound === 1) {
+        const result = await FirebaseService.getCurrentQuestion(1);
+        if (result.success) {
+          setCurrentQuestion(result.question);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading current question:', error);
+    }
+  };
 
   const loadUserProfile = async () => {
     try {
@@ -91,8 +112,30 @@ const GameScreen = ({ navigation, route }) => {
   };
   
   const getCurrentQuestionData = () => {
-    const questionIndex = (gameState?.currentQuestion || 1) - 1;
-    return questions[questionIndex] || questions[0];
+    // Return current question from state, or fallback to first question from data
+    if (currentQuestion) {
+      return {
+        ...currentQuestion,
+        imageUrl: currentQuestion.image // Map 'image' to 'imageUrl' for compatibility
+      };
+    }
+    
+    // Fallback to first question if available
+    if (questionsData?.round1Questions?.length > 0) {
+      const fallback = questionsData.round1Questions[0];
+      return {
+        ...fallback,
+        imageUrl: fallback.image
+      };
+    }
+    
+    // Default fallback
+    return {
+      id: 1,
+      word: 'LOADING',
+      imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Loading...',
+      points: 10
+    };
   };
   
   const handleSubmit = async () => {
@@ -101,54 +144,78 @@ const GameScreen = ({ navigation, route }) => {
       return;
     }
     
-    const currentQuestionData = getCurrentQuestionData();
-    const isCorrect = userAnswer.toUpperCase() === currentQuestionData.word.toUpperCase();
+    if (!currentQuestion) {
+      Alert.alert('Error', 'Question not loaded. Please wait...');
+      return;
+    }
     
     setLastSubmittedAnswer(userAnswer.toUpperCase());
-    setSubmissionResult(isCorrect ? 'correct' : 'incorrect');
     
     try {
-      // Submit answer to Firebase
+      // Validate answer using Firebase service
+      const validationResult = await FirebaseService.validateAnswer(
+        currentQuestion.id,
+        userAnswer.trim(),
+        gameState?.currentRound || 1
+      );
+
+      if (!validationResult.success) {
+        Alert.alert('Error', validationResult.error);
+        return;
+      }
+
+      const isCorrect = validationResult.isCorrect;
+      
+      setSubmissionResult(isCorrect ? 'correct' : 'incorrect');
+      
+      // Submit answer to Firebase (points calculated based on ranking)
       const result = await FirebaseService.submitAnswer(
         user.uid,
         gameState?.currentQuestion || 1,
-        userAnswer,
-        roundNumber
+        userAnswer.trim(),
+        gameState?.currentRound || 1,
+        isCorrect
       );
-      
-      if (result.success && isCorrect) {
-        const earnedPoints = result.points || 100;
-        setUserPoints(userPoints + earnedPoints);
-        setResultMessage(`✅ Correct! +${earnedPoints} points`);
-        setIsAnswered(true);
+
+      if (result.success) {
+        const earnedPoints = result.points || 0;
         
-        // Update local user profile
-        if (userProfile) {
-          const updatedProfile = {
-            ...userProfile,
-            round1Score: (userProfile.round1Score || 0) + earnedPoints,
-            lastAnsweredQuestion: gameState?.currentQuestion || 1
-          };
-          setUserProfile(updatedProfile);
-        }
-        
-        // Show correct feedback for 2 seconds, then show waiting message
-        setTimeout(() => {
-          setResultMessage('Waiting for admin to move to next question...');
+        if (isCorrect) {
+          setUserPoints(userPoints + earnedPoints);
+          setResultMessage(`🎉 Correct! +${earnedPoints} points`);
+          setIsAnswered(true);
+          
+          // Update local user profile
+          if (userProfile) {
+            const updatedProfile = {
+              ...userProfile,
+              round1Score: (userProfile.round1Score || 0) + earnedPoints,
+              lastAnsweredQuestion: gameState?.currentQuestion || 1
+            };
+            setUserProfile(updatedProfile);
+          }
+          
+          // Show correct feedback for 2 seconds, then show waiting message
+          setTimeout(() => {
+            setResultMessage('Waiting for admin to move to next question...');
+            setShowFeedback(true);
+          }, 2000);
+        } else {
+          setResultMessage(`❌ Incorrect! The answer was: ${validationResult.correctAnswer}`);
           setShowFeedback(true);
-        }, 2000);
-      } else {
-        setResultMessage(`❌ Incorrect! Try again.`);
+          setUserAnswer(''); // Clear for retry
+          
+          // Clear feedback after 3 seconds for incorrect answers
+          setTimeout(() => {
+            setResultMessage('');
+            setShowFeedback(false);
+            setSubmissionResult(null);
+            setLastSubmittedAnswer('');
+          }, 3000);
+        }
         setShowFeedback(true);
-        setUserAnswer(''); // Clear for retry
-        
-        // Clear feedback after 2 seconds
-        setTimeout(() => {
-          setResultMessage('');
-          setShowFeedback(false);
-          setSubmissionResult(null);
-          setLastSubmittedAnswer('');
-        }, 2000);
+      } else {
+        Alert.alert('Error', 'Failed to submit answer. Please try again.');
       }
     } catch (error) {
       console.error('Error submitting answer:', error);
@@ -240,12 +307,12 @@ const GameScreen = ({ navigation, route }) => {
         <Text style={styles.questionCounter}>
           Question {gameState?.currentQuestion || 1}/{gameState?.round1TotalQuestions || 20}
         </Text>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.navigate('Dashboard')}
-        >
-          <Text style={styles.backButtonText}>Dashboard</Text>
-        </TouchableOpacity>
+        <View style={styles.timerContainer}>
+          <Text style={[styles.timer, { color: getTimerColor() }]}>
+            {formatTime(timeLeft)}
+          </Text>
+          <Text style={styles.timerSubtext}>Universal Timer</Text>
+        </View>
       </View>
       
       {/* Points Display */}
@@ -345,23 +412,34 @@ const GameScreen = ({ navigation, route }) => {
         )}
       </View>
       
-      {/* Admin Controls */}
-      <View style={styles.adminControls}>
+      {/* Bottom Controls */}
+      <View style={styles.bottomControls}>
+        <TouchableOpacity 
+          style={styles.backToDashboard}
+          onPress={() => navigation.navigate('Dashboard')}
+        >
+          <Text style={styles.backToDashboardText}>← Dashboard</Text>
+        </TouchableOpacity>
+        
         <TouchableOpacity 
           style={styles.adminButton}
-          onPress={() => {
-            // Simulate admin clicking next question - timer resets for all users
-            if (currentQuestion < QUESTIONS_TOTAL) {
-              setCurrentQuestion(currentQuestion + 1);
-              setUserAnswer('');
-              setTimeLeft(TIMER_DURATION); // Reset timer for all users
-              setIsAnswered(false);
-              setShowResult(false);
-              setResultMessage('');
-              setShowFeedback(false);
-              setLastSubmittedAnswer('');
-              setSubmissionResult(null);
-              setRoundActive(true); // Reactivate round
+          onPress={async () => {
+            // Admin clicks next question - updates for all users via Firebase
+            const currentQuestionNum = gameState?.currentQuestion || 1;
+            if (currentQuestionNum < QUESTIONS_TOTAL) {
+              try {
+                await FirebaseService.nextQuestion(1);
+                // Reset local answer state
+                setUserAnswer('');
+                setIsAnswered(false);
+                setShowResult(false);
+                setResultMessage('');
+                setShowFeedback(false);
+                setLastSubmittedAnswer('');
+                setSubmissionResult(null);
+              } catch (error) {
+                Alert.alert('Error', 'Failed to advance question');
+              }
             } else {
               // Game finished, show standings
               navigation.navigate('Standings', { points: userPoints });
@@ -369,15 +447,15 @@ const GameScreen = ({ navigation, route }) => {
           }}
         >
           <Text style={styles.adminButtonText}>
-            {currentQuestion < QUESTIONS_TOTAL ? 'Next Question (Admin)' : 'View Standings'}
+            {(gameState?.currentQuestion || 1) < QUESTIONS_TOTAL ? 'Next Question (Admin)' : 'View Standings'}
           </Text>
         </TouchableOpacity>
-        
-        <View style={styles.adminInfo}>
-          <Text style={styles.adminInfoText}>
-            Timer runs universally for all players • Controlled by admin
-          </Text>
-        </View>
+      </View>
+      
+      <View style={styles.adminInfo}>
+        <Text style={styles.adminInfoText}>
+          Timer runs universally for all players • Controlled by admin
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -444,6 +522,7 @@ const styles = StyleSheet.create({
   },
   timerContainer: {
     alignItems: 'center',
+    minWidth: 80,
   },
   timer: {
     fontSize: 18,
@@ -605,17 +684,35 @@ const styles = StyleSheet.create({
     color: theme.textSecondary,
     fontStyle: 'italic',
   },
-  adminControls: {
+  bottomControls: {
     padding: 20,
     backgroundColor: theme.surface,
     borderTopWidth: 1,
     borderTopColor: theme.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  backToDashboard: {
+    backgroundColor: theme.secondary,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 8,
+    ...shadows.small,
+  },
+  backToDashboardText: {
+    color: theme.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
   },
   adminButton: {
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.primary,
     borderRadius: 8,
     paddingVertical: 12,
+    paddingHorizontal: 20,
     alignItems: 'center',
+    flex: 1,
+    marginLeft: 15,
     ...shadows.small,
   },
   adminButtonText: {
@@ -624,7 +721,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   adminInfo: {
-    marginTop: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: theme.surface,
     alignItems: 'center',
   },
   adminInfoText: {

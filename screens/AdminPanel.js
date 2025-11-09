@@ -20,6 +20,7 @@ const AdminPanel = ({ navigation }) => {
   const [qualifiedParticipants, setQualifiedParticipants] = useState([]);
   const [buzzerRankings, setBuzzerRankings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [resettingRound, setResettingRound] = useState(false);
 
   useEffect(() => {
     loadParticipants();
@@ -56,13 +57,12 @@ const AdminPanel = ({ navigation }) => {
   // Round 1 Handlers
   const handleStartRound1 = async () => {
     try {
-      await FirebaseService.updateGameState({
-        round1Active: true,
-        currentRound: 1,
-        gameStarted: true,
-        currentQuestion: 1
-      });
-      Alert.alert('Round 1 Started', 'All participants can now see Question 1');
+      const result = await FirebaseService.enableRound1();
+      if (result.success) {
+        Alert.alert('Round 1 Started', 'All participants can now see Question 1 with active timer!');
+      } else {
+        Alert.alert('Error', result.error || 'Failed to start Round 1');
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to start Round 1');
     }
@@ -70,19 +70,26 @@ const AdminPanel = ({ navigation }) => {
 
   const handleRound1NextQuestion = () => {
     const nextQuestion = (gameState?.currentQuestion || 1) + 1;
+    if (nextQuestion > 20) {
+      Alert.alert('Round Complete', 'Round 1 is finished!');
+      return;
+    }
+    
     Alert.alert(
       'Next Question',
-      `Move all participants to Question ${nextQuestion}?`,
+      `Move all participants to Question ${nextQuestion} with fresh timer?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Continue', 
           onPress: async () => {
             try {
-              await FirebaseService.updateGameState({
-                currentQuestion: nextQuestion
-              });
-              Alert.alert('Success', `All participants moved to Question ${nextQuestion}`);
+              const result = await FirebaseService.nextQuestion(1);
+              if (result.success) {
+                Alert.alert('Success', `All participants moved to Question ${nextQuestion} with 90-second timer!`);
+              } else {
+                Alert.alert('Error', result.error || 'Failed to update question');
+              }
             } catch (error) {
               Alert.alert('Error', 'Failed to update question');
             }
@@ -119,14 +126,12 @@ const AdminPanel = ({ navigation }) => {
   // Round 2 Handlers
   const handleStartRound2 = async () => {
     try {
-      await FirebaseService.updateGameState({
-        round2Active: true,
-        currentRound: 2,
-        currentQuestion: 1,
-        round2QuestionActive: false,
-        round2BuzzerActive: false
-      });
-      Alert.alert('Round 2 Started', 'Qualified participants can now join Round 2');
+      const result = await FirebaseService.enableRound2();
+      if (result.success) {
+        Alert.alert('Round 2 Started', 'Qualified participants can now join Round 2 with active timer!');
+      } else {
+        Alert.alert('Error', result.error || 'Failed to start Round 2');
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to start Round 2');
     }
@@ -135,18 +140,17 @@ const AdminPanel = ({ navigation }) => {
   const handleRound2NextQuestion = async () => {
     try {
       const nextQuestion = (gameState?.currentQuestion || 1) + 1;
+      if (nextQuestion > 15) {
+        Alert.alert('Round Complete', 'Round 2 is finished!');
+        return;
+      }
       
-      // First, deactivate any active buzzer/question
-      await FirebaseService.updateGameState({
-        round2QuestionActive: false,
-        round2BuzzerActive: false,
-        currentQuestion: nextQuestion
-      });
-      
-      // Reset buzzer responses
-      await FirebaseService.resetBuzzerRound();
-      
-      Alert.alert('Question Updated', `Ready for Question ${nextQuestion}. Click "Show Question" when ready.`);
+      const result = await FirebaseService.nextQuestion(2);
+      if (result.success) {
+        Alert.alert('Success', `Ready for Question ${nextQuestion} with fresh timer! Click "Show Question" when ready.`);
+      } else {
+        Alert.alert('Error', result.error || 'Failed to update question');
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to update question');
     }
@@ -217,6 +221,66 @@ const AdminPanel = ({ navigation }) => {
               });
             } catch (error) {
               Alert.alert('Error', 'Failed to end Round 2');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleResetRound1 = () => {
+    Alert.alert(
+      'Reset Round 1',
+      'This will clear all answers, scores, and progress for Round 1. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Reset Round 1', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setResettingRound(true);
+              const result = await FirebaseService.resetRound(1);
+              if (result.success) {
+                Alert.alert('Round 1 Reset', 'All Round 1 data has been cleared and reset to Question 1');
+                await loadParticipants(); // Refresh participant data
+              } else {
+                Alert.alert('Error', result.error || 'Failed to reset Round 1');
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to reset Round 1');
+            } finally {
+              setResettingRound(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleResetRound2 = () => {
+    Alert.alert(
+      'Reset Round 2',
+      'This will clear all Round 2 answers, buzzer responses, and scores. Round 1 scores will be preserved. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Reset Round 2', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setResettingRound(true);
+              const result = await FirebaseService.resetRound(2);
+              if (result.success) {
+                Alert.alert('Round 2 Reset', 'All Round 2 data has been cleared and reset to Question 1');
+                await loadParticipants(); // Refresh participant data
+              } else {
+                Alert.alert('Error', result.error || 'Failed to reset Round 2');
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to reset Round 2');
+            } finally {
+              setResettingRound(false);
             }
           }
         }
@@ -301,6 +365,16 @@ const AdminPanel = ({ navigation }) => {
                       <Text style={styles.buttonText}>Next Question</Text>
                     </TouchableOpacity>
                     
+                    <TouchableOpacity 
+                      style={[styles.resetButton, resettingRound && styles.disabledButton]} 
+                      onPress={handleResetRound1}
+                      disabled={resettingRound}
+                    >
+                      <Text style={styles.buttonText}>
+                        {resettingRound ? 'Resetting...' : 'Reset Round'}
+                      </Text>
+                    </TouchableOpacity>
+                    
                     <TouchableOpacity style={styles.endButton} onPress={handleEndRound1}>
                       <Text style={styles.buttonText}>End Round 1</Text>
                     </TouchableOpacity>
@@ -308,6 +382,63 @@ const AdminPanel = ({ navigation }) => {
                 )}
               </View>
             </View>
+
+            {/* Timer Controls */}
+            {gameState?.round1Active && (
+              <View style={styles.timerSection}>
+                <Text style={styles.timerTitle}>Timer Control</Text>
+                <View style={styles.timerInfo}>
+                  <Text style={[styles.timerText, { color: gameState?.timerActive ? '#27ae60' : '#e74c3c' }]}>
+                    {gameState?.timerActive ? 'Timer Active' : 'Timer Stopped'} • {gameState?.timeRemaining || 90}s remaining
+                  </Text>
+                </View>
+                <View style={styles.timerControls}>
+                  {!gameState?.timerActive ? (
+                    <TouchableOpacity 
+                      style={styles.timerButton}
+                      onPress={async () => {
+                        try {
+                          await FirebaseService.startTimer(90);
+                          Alert.alert('Timer Started', '90-second timer started for all participants');
+                        } catch (error) {
+                          Alert.alert('Error', 'Failed to start timer');
+                        }
+                      }}
+                    >
+                      <Text style={styles.timerButtonText}>Start Timer (90s)</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity 
+                      style={[styles.timerButton, styles.stopButton]}
+                      onPress={async () => {
+                        try {
+                          await FirebaseService.stopTimer();
+                          await FirebaseService.updateGameState({ timerActive: false });
+                          Alert.alert('Timer Stopped', 'Timer stopped for all participants');
+                        } catch (error) {
+                          Alert.alert('Error', 'Failed to stop timer');
+                        }
+                      }}
+                    >
+                      <Text style={styles.timerButtonText}>Stop Timer</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity 
+                    style={[styles.timerButton, styles.resetButton]}
+                    onPress={async () => {
+                      try {
+                        await FirebaseService.resetTimer(90);
+                        Alert.alert('Timer Reset', 'Timer reset to 90 seconds for all participants');
+                      } catch (error) {
+                        Alert.alert('Error', 'Failed to reset timer');
+                      }
+                    }}
+                  >
+                    <Text style={styles.timerButtonText}>Reset Timer</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* Round 1 Stats */}
             <View style={styles.section}>
@@ -402,6 +533,16 @@ const AdminPanel = ({ navigation }) => {
                 <View style={styles.buttonRow}>
                   <TouchableOpacity style={styles.resetButton} onPress={handleResetBuzzer}>
                     <Text style={styles.buttonText}>Reset Buzzer</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.resetButton, styles.resetRoundButton, resettingRound && styles.disabledButton]} 
+                    onPress={handleResetRound2}
+                    disabled={resettingRound}
+                  >
+                    <Text style={styles.buttonText}>
+                      {resettingRound ? 'Resetting...' : 'Reset Round'}
+                    </Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity style={styles.endButton} onPress={handleEndRound2}>
@@ -589,6 +730,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...shadows.small,
   },
+  resetRoundButton: {
+    backgroundColor: '#e67e22', // Orange color to distinguish from regular reset
+  },
   endButton: {
     flex: 1,
     backgroundColor: theme.error,
@@ -600,6 +744,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: theme.textPrimary,
     fontWeight: '600',
+    borderRadius: 8,
   },
   participantRow: {
     flexDirection: 'row',
@@ -649,6 +794,50 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     paddingVertical: 20,
+  },
+  timerSection: {
+    marginTop: 20,
+    padding: 15,
+    borderRadius: 12,
+    backgroundColor: theme.surface,
+    ...shadows.medium,
+  },
+  timerTitle: {
+    ...typography.h4,
+    marginBottom: 10,
+  },
+  timerInfo: {
+    marginBottom: 10,
+  },
+  timerText: {
+    ...typography.body,
+    fontWeight: '600',
+  },
+  timerControls: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  timerButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: theme.primary,
+    ...shadows.small,
+  },
+  stopButton: {
+    backgroundColor: theme.error,
+  },
+  resetButton: {
+    backgroundColor: theme.warning,
+  },
+  timerButtonText: {
+    color: theme.textPrimary,
+    fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
+    backgroundColor: theme.textMuted,
   },
 });
 

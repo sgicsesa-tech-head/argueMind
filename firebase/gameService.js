@@ -270,43 +270,84 @@ export class FirebaseService {
 
   // Admin Controls
   static async enableRound1() {
-    return await this.updateGameState({
+    const result = await this.updateGameState({
       round1Active: true,
       gameStarted: true,
-      timerActive: true,
+      currentRound: 1,
+      currentQuestion: 1,
+      timerActive: false,
       timeRemaining: 90
     });
+    
+    if (result.success) {
+      // Start the timer automatically
+      await this.startTimer(90);
+    }
+    
+    return result;
   }
 
   static async nextQuestion(round) {
-    const gameRef = doc(db, 'gameState', 'current');
-    const gameDoc = await getDoc(gameRef);
-    
-    if (gameDoc.exists()) {
-      const gameData = gameDoc.data();
-      const currentQuestion = gameData.currentQuestion + 1;
+    try {
+      const gameRef = doc(db, 'gameState', 'current');
+      const gameDoc = await getDoc(gameRef);
       
-      return await this.updateGameState({
-        currentQuestion: currentQuestion,
-        timerActive: true,
-        timeRemaining: 90,
-        round2BuzzerActive: false,
-        round2QuestionActive: round === 2 ? false : gameData.round2QuestionActive
-      });
+      if (gameDoc.exists()) {
+        const gameData = gameDoc.data();
+        const currentQuestion = gameData.currentQuestion + 1;
+        
+        // Stop current timer first
+        this.stopTimer();
+        
+        // Update game state
+        const result = await this.updateGameState({
+          currentQuestion: currentQuestion,
+          timerActive: false,
+          timeRemaining: 90,
+          round2BuzzerActive: false,
+          round2QuestionActive: round === 2 ? false : gameData.round2QuestionActive
+        });
+        
+        // Start new timer for the next question
+        if (result.success) {
+          await this.startTimer(90);
+        }
+        
+        return result;
+      }
+      
+      return { success: false, error: 'Game state not found' };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
   }
 
   static async enableRound2() {
-    // First, calculate qualified participants
-    await this.calculateRound1Rankings();
-    
-    return await this.updateGameState({
-      round1Active: false,
-      round2Active: true,
-      currentRound: 2,
-      currentQuestion: 1,
-      timeRemaining: 90
-    });
+    try {
+      // Stop any existing timer
+      this.stopTimer();
+      
+      // First, calculate qualified participants
+      await this.calculateRound1Rankings();
+      
+      const result = await this.updateGameState({
+        round1Active: false,
+        round2Active: true,
+        currentRound: 2,
+        currentQuestion: 1,
+        timerActive: false,
+        timeRemaining: 90
+      });
+      
+      // Start timer for Round 2
+      if (result.success) {
+        await this.startTimer(90);
+      }
+      
+      return result;
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   }
 
   static async enableRound2Question() {
@@ -320,6 +361,80 @@ export class FirebaseService {
       round2BuzzerActive: true,
       buzzerStartTime: serverTimestamp()
     });
+  }
+
+  // Timer Management - NEW
+  static timerInterval = null;
+
+  static async startTimer(duration = 90) {
+    try {
+      // Clear any existing timer
+      this.stopTimer();
+      
+      // Set initial timer state
+      await this.updateGameState({
+        timerActive: true,
+        timeRemaining: duration,
+        timerStartTime: serverTimestamp()
+      });
+
+      // Start countdown on server side
+      this.timerInterval = setInterval(async () => {
+        try {
+          const gameRef = doc(db, 'gameState', 'current');
+          const gameDoc = await getDoc(gameRef);
+          
+          if (gameDoc.exists()) {
+            const gameData = gameDoc.data();
+            const currentTime = gameData.timeRemaining || duration;
+            
+            if (currentTime > 0 && gameData.timerActive) {
+              // Decrease timer by 1 second
+              await updateDoc(gameRef, {
+                timeRemaining: currentTime - 1,
+                lastUpdated: serverTimestamp()
+              });
+            } else if (currentTime <= 0) {
+              // Timer finished
+              await this.stopTimer();
+              await updateDoc(gameRef, {
+                timerActive: false,
+                timeRemaining: 0,
+                lastUpdated: serverTimestamp()
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Timer update error:', error);
+          this.stopTimer();
+        }
+      }, 1000);
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  static stopTimer() {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+  }
+
+  static async resetTimer(duration = 90) {
+    try {
+      this.stopTimer();
+      await this.updateGameState({
+        timerActive: false,
+        timeRemaining: duration,
+        timerStartTime: null
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   }
 
   // Score Management
@@ -348,9 +463,16 @@ export class FirebaseService {
     }
   }
 
-  // Answer Submission
-  static async submitAnswer(userId, questionNumber, answer, roundNumber) {
+  // Answer Submission with Ranking-Based Points
+  static async submitAnswer(userId, questionNumber, answer, roundNumber, isCorrectAnswer = false) {
     try {
+      let calculatedPoints = 0;
+      
+      if (isCorrectAnswer) {
+        // Calculate points based on submission order (base 90 points + ranking multiplier)
+        calculatedPoints = await this.calculateRankingPoints(userId, questionNumber, roundNumber);
+      }
+      
       // Create answer submission record
       const answersRef = collection(db, 'answers');
       const answerDoc = await addDoc(answersRef, {
@@ -359,39 +481,60 @@ export class FirebaseService {
         answer: answer.toUpperCase(),
         roundNumber: roundNumber,
         timestamp: serverTimestamp(),
-        isCorrect: false,
-        points: 0
+        isCorrect: isCorrectAnswer,
+        points: calculatedPoints
       });
 
-      // Simple validation - in a real app, you'd have the correct answers in the database
-      const correctAnswers = {
-        1: 'ELEPHANT',
-        2: 'BUTTERFLY', 
-        3: 'COMPUTER',
-        4: 'RAINBOW',
-        // Add more correct answers...
-      };
-
-      const isCorrect = answer.toUpperCase() === correctAnswers[questionNumber];
-      let points = 0;
-
-      if (isCorrect) {
-        // Calculate points (base 100 + time bonus would be calculated here)
-        points = 100;
-
-        // Update the answer document
-        await updateDoc(answerDoc, {
-          isCorrect: true,
-          points: points
-        });
-
+      if (isCorrectAnswer && calculatedPoints > 0) {
         // Update user's score
-        await this.updateUserScore(userId, roundNumber, points);
+        await this.updateUserScore(userId, roundNumber, calculatedPoints);
       }
 
-      return { success: true, isCorrect, points };
+      return { success: true, isCorrect: isCorrectAnswer, points: calculatedPoints };
     } catch (error) {
       return { success: false, error: error.message };
+    }
+  }
+
+  // Calculate points based on submission ranking
+  static async calculateRankingPoints(userId, questionNumber, roundNumber) {
+    try {
+      // Count how many correct answers have been submitted for this question before this user
+      const answersQuery = query(
+        collection(db, 'answers'),
+        where('questionNumber', '==', questionNumber),
+        where('roundNumber', '==', roundNumber),
+        where('isCorrect', '==', true),
+        orderBy('timestamp', 'asc')
+      );
+      
+      const answersSnapshot = await getDocs(answersQuery);
+      const correctAnswersCount = answersSnapshot.size;
+      
+      // Base points: 90
+      const basePoints = 90;
+      
+      // Ranking multipliers: 1st = +15 (105 total), 2nd = +10 (100 total), 3rd = +5 (95 total), 4th+ = +0 (90 total)
+      let rankingBonus = 0;
+      switch (correctAnswersCount) {
+        case 0: // First correct answer
+          rankingBonus = 15;
+          break;
+        case 1: // Second correct answer
+          rankingBonus = 10;
+          break;
+        case 2: // Third correct answer
+          rankingBonus = 5;
+          break;
+        default: // Fourth or later
+          rankingBonus = 0;
+          break;
+      }
+      
+      return basePoints + rankingBonus;
+    } catch (error) {
+      console.error('Error calculating ranking points:', error);
+      return 90; // Fallback to base points
     }
   }
 
@@ -553,6 +696,90 @@ export class FirebaseService {
     }
   }
 
+  // Questions Management - Enhanced
+  static questionsData = null;
+
+  static async loadQuestionsData() {
+    try {
+      if (!this.questionsData) {
+        // Import the questions data
+        const questionsModule = await import('../data/questions.json');
+        this.questionsData = questionsModule.default || questionsModule;
+      }
+      return { success: true, data: this.questionsData };
+    } catch (error) {
+      console.error('Error loading questions data:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  static async getCurrentQuestion(round = 1) {
+    try {
+      const questionsResult = await this.loadQuestionsData();
+      if (!questionsResult.success) {
+        return questionsResult;
+      }
+
+      const gameRef = doc(db, 'gameState', 'current');
+      const gameDoc = await getDoc(gameRef);
+      
+      if (!gameDoc.exists()) {
+        return { success: false, error: 'Game state not found' };
+      }
+
+      const gameData = gameDoc.data();
+      const questionNumber = gameData.currentQuestion || 1;
+      
+      if (round === 1) {
+        const question = questionsResult.data.round1Questions?.find(q => q.id === questionNumber);
+        if (!question) {
+          return { success: false, error: `Question ${questionNumber} not found` };
+        }
+        return { success: true, question };
+      }
+      
+      // Add Round 2 questions handling later if needed
+      return { success: false, error: 'Round 2 questions not implemented yet' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  static async validateAnswer(questionId, userAnswer, round = 1) {
+    try {
+      const questionsResult = await this.loadQuestionsData();
+      if (!questionsResult.success) {
+        return questionsResult;
+      }
+
+      if (round === 1) {
+        const question = questionsResult.data.round1Questions?.find(q => q.id === questionId);
+        if (!question) {
+          return { success: false, error: 'Question not found' };
+        }
+
+        // Normalize both answers for comparison
+        const normalizedUserAnswer = userAnswer.toLowerCase().trim();
+        const normalizedCorrectAnswer = question.word.toLowerCase().trim();
+        
+        const isCorrect = normalizedUserAnswer === normalizedCorrectAnswer;
+        const points = isCorrect ? question.points : 0;
+        
+        return { 
+          success: true, 
+          isCorrect, 
+          points, 
+          correctAnswer: question.word,
+          difficulty: question.difficulty 
+        };
+      }
+      
+      return { success: false, error: 'Round 2 validation not implemented yet' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   // Initialize the application (call this once on app start)
   static async initializeApp() {
     try {
@@ -577,6 +804,139 @@ export class FirebaseService {
       }
       
       console.error('Error initializing app:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // App Lifecycle Management
+  static cleanup() {
+    // Clean up any running timers
+    this.stopTimer();
+  }
+
+  // Enhanced initialization with timer management
+  static async initialize() {
+    try {
+      // Clean up any existing timers first
+      this.cleanup();
+      
+      // Initialize the app
+      const result = await this.initializeApp();
+      
+      // Check if there's an active timer that needs to be resumed
+      const gameRef = doc(db, 'gameState', 'current');
+      const gameDoc = await getDoc(gameRef);
+      
+      if (gameDoc.exists()) {
+        const gameData = gameDoc.data();
+        
+        // If timer was active but we don't have a running interval, restart it
+        if (gameData.timerActive && !this.timerInterval && gameData.timeRemaining > 0) {
+          console.log('Resuming timer from stored state...');
+          await this.startTimer(gameData.timeRemaining);
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error during Firebase initialization:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Round Reset Functionality
+  static async resetRound(roundNumber) {
+    try {
+      // Stop any active timer
+      this.stopTimer();
+      
+      if (roundNumber === 1) {
+        // Reset Round 1
+        const result = await this.updateGameState({
+          round1Active: true,
+          currentQuestion: 1,
+          timerActive: false,
+          timeRemaining: 90,
+          gameStarted: true
+        });
+        
+        // Clear all Round 1 answers
+        const answersQuery = query(
+          collection(db, 'answers'),
+          where('roundNumber', '==', 1)
+        );
+        const answersSnapshot = await getDocs(answersQuery);
+        
+        // Delete all Round 1 answers
+        const deletePromises = answersSnapshot.docs.map(doc => doc.ref.delete());
+        await Promise.all(deletePromises);
+        
+        // Reset all user Round 1 scores
+        const usersQuery = query(
+          collection(db, 'users'),
+          where('isAdmin', '==', false)
+        );
+        const usersSnapshot = await getDocs(usersQuery);
+        
+        const updateUserPromises = usersSnapshot.docs.map(userDoc => 
+          updateDoc(userDoc.ref, {
+            round1Score: 0,
+            lastAnsweredQuestion: 0,
+            totalScore: userDoc.data().round2Score || 0
+          })
+        );
+        await Promise.all(updateUserPromises);
+        
+        return result;
+      } else if (roundNumber === 2) {
+        // Reset Round 2
+        const result = await this.updateGameState({
+          round2Active: true,
+          currentQuestion: 1,
+          timerActive: false,
+          timeRemaining: 90,
+          round2QuestionActive: false,
+          round2BuzzerActive: false
+        });
+        
+        // Clear all Round 2 answers and buzzer responses
+        const answersQuery = query(
+          collection(db, 'answers'),
+          where('roundNumber', '==', 2)
+        );
+        const answersSnapshot = await getDocs(answersQuery);
+        
+        const buzzerQuery = collection(db, 'buzzerResponses');
+        const buzzerSnapshot = await getDocs(buzzerQuery);
+        
+        // Delete all Round 2 data
+        const deletePromises = [
+          ...answersSnapshot.docs.map(doc => doc.ref.delete()),
+          ...buzzerSnapshot.docs.map(doc => doc.ref.delete())
+        ];
+        await Promise.all(deletePromises);
+        
+        // Reset all user Round 2 scores (keep Round 1 scores)
+        const usersQuery = query(
+          collection(db, 'users'),
+          where('isAdmin', '==', false)
+        );
+        const usersSnapshot = await getDocs(usersQuery);
+        
+        const updateUserPromises = usersSnapshot.docs.map(userDoc => 
+          updateDoc(userDoc.ref, {
+            round2Score: 0,
+            totalScore: userDoc.data().round1Score || 0,
+            qualified: (userDoc.data().round1Score || 0) > 0
+          })
+        );
+        await Promise.all(updateUserPromises);
+        
+        return result;
+      }
+      
+      return { success: false, error: 'Invalid round number' };
+    } catch (error) {
       return { success: false, error: error.message };
     }
   }

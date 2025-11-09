@@ -17,8 +17,13 @@ const Stack = createStackNavigator();
 
 export default function App() {
   useEffect(() => {
-    // Initialize Firebase app and create game state if needed
-    FirebaseService.initializeApp().catch(console.error);
+    // Initialize Firebase app with timer management
+    FirebaseService.initialize().catch(console.error);
+    
+    // Cleanup on app unmount
+    return () => {
+      FirebaseService.cleanup();
+    };
   }, []);
 
   return (
