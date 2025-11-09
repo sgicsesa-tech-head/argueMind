@@ -182,13 +182,6 @@ const DashboardScreen = ({ navigation }) => {
                gameState?.round2Active ? 'Active - Tap to join' : 'Waiting for admin to start'}
             </Text>
           </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.standingsButton}
-            onPress={() => navigation.navigate('Standings')}
-          >
-            <Text style={styles.standingsButtonText}>View Standings</Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>

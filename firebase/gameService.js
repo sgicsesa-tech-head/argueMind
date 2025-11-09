@@ -503,42 +503,30 @@ export class FirebaseService {
     }
   }
 
-  // Calculate points based on submission ranking
+  // Calculate points based on time remaining
   static async calculateRankingPoints(userId, questionNumber, roundNumber) {
     try {
-      // Count how many correct answers have been submitted for this question before this user
-      const answersQuery = query(
-        collection(db, 'answers'),
-        where('questionNumber', '==', questionNumber),
-        where('roundNumber', '==', roundNumber),
-        where('isCorrect', '==', true),
-        orderBy('timestamp', 'asc')
-      );
+      // Get current game state to check time remaining
+      const gameRef = doc(db, 'gameState', 'current');
+      const gameDoc = await getDoc(gameRef);
       
-      const answersSnapshot = await getDocs(answersQuery);
-      const correctAnswersCount = answersSnapshot.size;
+      let timeRemaining = 0;
+      if (gameDoc.exists()) {
+        const gameData = gameDoc.data();
+        timeRemaining = gameData.timeRemaining || 0;
+      }
       
       // Base points: 90
       const basePoints = 90;
       
-      // Ranking multipliers: 1st = +15 (105 total), 2nd = +10 (100 total), 3rd = +5 (95 total), 4th+ = +0 (90 total)
-      let rankingBonus = 0;
-      switch (correctAnswersCount) {
-        case 0: // First correct answer
-          rankingBonus = 15;
-          break;
-        case 1: // Second correct answer
-          rankingBonus = 10;
-          break;
-        case 2: // Third correct answer
-          rankingBonus = 5;
-          break;
-        default: // Fourth or later
-          rankingBonus = 0;
-          break;
-      }
+      // Time bonus: Based on time remaining (0 to 90 seconds)
+      // If 90s remaining (answered immediately): 90 + 90 = 180 points
+      // If 45s remaining (answered at 45s): 90 + 45 = 135 points
+      // If 10s remaining (answered at 80s): 90 + 10 = 100 points
+      // If 0s remaining (answered at last second): 90 + 0 = 90 points
+      const timeBonus = Math.max(0, Math.min(90, timeRemaining));
       
-      return basePoints + rankingBonus;
+      return basePoints + timeBonus;
     } catch (error) {
       console.error('Error calculating ranking points:', error);
       return 90; // Fallback to base points
