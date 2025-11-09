@@ -9,6 +9,8 @@ import DashboardScreen from './screens/DashboardScreen';
 import GameScreen from './screens/GameScreen';
 import StandingsScreen from './screens/StandingsScreen';
 import AdminPanel from './screens/AdminPanel';
+import Round2GameScreen from './screens/Round2GameScreen';
+import FinalStandingsScreen from './screens/FinalStandingsScreen';
 
 const Stack = createStackNavigator();
 
@@ -28,6 +30,8 @@ export default function App() {
           <Stack.Screen name="Game" component={GameScreen} />
           <Stack.Screen name="Standings" component={StandingsScreen} />
           <Stack.Screen name="Admin" component={AdminPanel} />
+          <Stack.Screen name="Round2Game" component={Round2GameScreen} />
+          <Stack.Screen name="FinalStandings" component={FinalStandingsScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

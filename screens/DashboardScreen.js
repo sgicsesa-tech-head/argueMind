@@ -48,7 +48,7 @@ const DashboardScreen = ({ navigation }) => {
         
         <TouchableOpacity 
           style={styles.roundButton}
-          onPress={() => navigation.navigate('Game', { roundNumber: 2 })}
+          onPress={() => navigation.navigate('Round2Game')}
         >
           <Text style={styles.roundButtonText}>Round 2</Text>
         </TouchableOpacity>
