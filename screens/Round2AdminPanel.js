@@ -14,20 +14,7 @@ const Round2AdminPanel = ({ navigation }) => {
   const [buzzerActive, setBuzzerActive] = useState(false);
   const [questionActive, setQuestionActive] = useState(false);
   const [buzzerRankings, setBuzzerRankings] = useState([]);
-  
-  // Sample qualified participants (top 10-15 from Round 1)
-  const [participants, setParticipants] = useState([
-    { id: 1, name: 'Player 1', round1Score: 1850, round2Score: 0, buzzed: false, buzzerTime: null, scored: false },
-    { id: 2, name: 'Player 2', round1Score: 1780, round2Score: 20, buzzed: true, buzzerTime: 234, scored: true },
-    { id: 3, name: 'Player 3', round1Score: 1720, round2Score: 0, buzzed: false, buzzerTime: null, scored: false },
-    { id: 4, name: 'Player 4', round1Score: 1680, round2Score: -10, buzzed: true, buzzerTime: 567, scored: true },
-    { id: 5, name: 'Player 5', round1Score: 1650, round2Score: 0, buzzed: false, buzzerTime: null, scored: false },
-    { id: 6, name: 'Player 6', round1Score: 1620, round2Score: 20, buzzed: true, buzzerTime: 123, scored: true },
-    { id: 7, name: 'Player 7', round1Score: 1590, round2Score: 0, buzzed: false, buzzerTime: null, scored: false },
-    { id: 8, name: 'Player 8', round1Score: 1560, round2Score: 0, buzzed: false, buzzerTime: null, scored: false },
-    { id: 9, name: 'Player 9', round1Score: 1530, round2Score: 20, buzzed: true, buzzerTime: 345, scored: true },
-    { id: 10, name: 'Player 10', round1Score: 1500, round2Score: -10, buzzed: true, buzzerTime: 678, scored: true },
-  ]);
+  const [participants, setParticipants] = useState([]);
 
   const handleStartQuestion = () => {
     Alert.alert(
@@ -108,16 +95,15 @@ const Round2AdminPanel = ({ navigation }) => {
   const handleEndRound = () => {
     Alert.alert(
       'End Round 2',
-      'Show final tournament standings?',
+      'Show Round 2 standings?',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'Show Final Results', 
+          text: 'Show Results', 
           onPress: () => {
-            navigation.navigate('FinalStandings', { 
+            navigation.navigate('Standings', { 
               round: 2, 
-              isAdmin: true,
-              participants: participants 
+              isAdmin: true
             });
           }
         }

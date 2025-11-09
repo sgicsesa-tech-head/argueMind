@@ -19,6 +19,7 @@ const AdminPanel = ({ navigation }) => {
   const [participants, setParticipants] = useState([]);
   const [qualifiedParticipants, setQualifiedParticipants] = useState([]);
   const [buzzerRankings, setBuzzerRankings] = useState([]);
+  const [buzzerResponses, setBuzzerResponses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [resettingRound, setResettingRound] = useState(false);
 
@@ -29,6 +30,66 @@ const AdminPanel = ({ navigation }) => {
     }
   }, [gameState]);
 
+  useEffect(() => {
+    // Subscribe to buzzer responses for current question in Round 2
+    if (selectedRound === 2 && gameState?.currentQuestion) {
+      console.log('[AdminPanel] Subscribing to buzzer responses for question:', gameState.currentQuestion);
+      console.log('[AdminPanel] GameState:', {
+        round2Active: gameState.round2Active,
+        round2BuzzerActive: gameState.round2BuzzerActive,
+        currentQuestion: gameState.currentQuestion
+      });
+      
+      const unsubscribe = FirebaseService.subscribeToBuzzerResponses(
+        gameState.currentQuestion,
+        async (responses) => {
+          console.log('[AdminPanel] Received buzzer responses:', responses.length);
+          console.log('[AdminPanel] Raw responses:', JSON.stringify(responses, null, 2));
+          
+          if (responses.length === 0) {
+            console.log('[AdminPanel] No responses yet');
+            setBuzzerResponses([]);
+            return;
+          }
+          
+          // Fetch user details for each response
+          try {
+            const responsesWithDetails = await Promise.all(
+              responses.map(async (response) => {
+                try {
+                  const userResult = await FirebaseService.getUserProfile(response.userId);
+                  return {
+                    ...response,
+                    teamName: userResult.success ? userResult.data.teamName : 'Unknown Team'
+                  };
+                } catch (error) {
+                  console.error('[AdminPanel] Error fetching user profile for:', response.userId, error);
+                  return {
+                    ...response,
+                    teamName: 'Unknown Team'
+                  };
+                }
+              })
+            );
+            
+            console.log('[AdminPanel] Buzzer responses with team names:', responsesWithDetails.length);
+            setBuzzerResponses(responsesWithDetails);
+          } catch (error) {
+            console.error('[AdminPanel] Error processing buzzer responses:', error);
+            setBuzzerResponses([]);
+          }
+        }
+      );
+      return () => {
+        console.log('[AdminPanel] Unsubscribing from buzzer responses');
+        unsubscribe();
+      };
+    } else {
+      console.log('[AdminPanel] Clearing buzzer responses - selectedRound:', selectedRound, 'currentQuestion:', gameState?.currentQuestion);
+      setBuzzerResponses([]);
+    }
+  }, [selectedRound, gameState?.currentQuestion]);
+
   const loadParticipants = async () => {
     try {
       const result = await FirebaseService.getAllUsers();
@@ -36,11 +97,14 @@ const AdminPanel = ({ navigation }) => {
         const allParticipants = result.users.filter(user => !user.isAdmin);
         setParticipants(allParticipants);
         
-        // Get qualified participants for Round 2 (top 10 from Round 1)
+        // Get qualified count from gameState (default to 10, max 15)
+        const qualifiedCount = Math.min(gameState?.qualifiedCount || 10, 15);
+        
+        // Get qualified participants for Round 2 (top N from Round 1)
         const qualified = allParticipants
           .filter(user => user.round1Score > 0)
           .sort((a, b) => b.round1Score - a.round1Score)
-          .slice(0, 10);
+          .slice(0, qualifiedCount);
         
         setQualifiedParticipants(qualified);
         
@@ -59,7 +123,7 @@ const AdminPanel = ({ navigation }) => {
     try {
       const result = await FirebaseService.enableRound1();
       if (result.success) {
-        Alert.alert('Round 1 Started', 'All participants can now see Question 1. Click "Start Timer" to begin the countdown!');
+        Alert.alert('Round 1 Started', 'All participants can now see Question 1 with active timer!');
       } else {
         Alert.alert('Error', result.error || 'Failed to start Round 1');
       }
@@ -77,7 +141,7 @@ const AdminPanel = ({ navigation }) => {
     
     Alert.alert(
       'Next Question',
-      `Move all participants to Question ${nextQuestion}? (Timer will NOT start automatically)`,
+      `Move all participants to Question ${nextQuestion} with fresh timer?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -86,7 +150,7 @@ const AdminPanel = ({ navigation }) => {
             try {
               const result = await FirebaseService.nextQuestion(1);
               if (result.success) {
-                Alert.alert('Success', `All participants moved to Question ${nextQuestion}. Click "Start Timer" when ready.`);
+                Alert.alert('Success', `All participants moved to Question ${nextQuestion} with 90-second timer!`);
               } else {
                 Alert.alert('Error', result.error || 'Failed to update question');
               }
@@ -181,13 +245,27 @@ const AdminPanel = ({ navigation }) => {
 
   const handleResetBuzzer = async () => {
     try {
-      await FirebaseService.resetBuzzerRound();
+      await FirebaseService.clearCurrentQuestionBuzzer(gameState?.currentQuestion);
       await FirebaseService.updateGameState({
         round2BuzzerActive: false
       });
-      Alert.alert('Buzzer Reset', 'All buzzer responses have been cleared');
+      Alert.alert('Buzzer Reset', 'Current question buzzer responses have been cleared');
     } catch (error) {
       Alert.alert('Error', 'Failed to reset buzzer');
+    }
+  };
+
+  const handleScoreBuzzer = async (userId, questionNumber, points) => {
+    try {
+      const result = await FirebaseService.scoreBuzzerResponse(userId, questionNumber, points);
+      if (result.success) {
+        Alert.alert('Points Awarded', `${points > 0 ? '+' : ''}${points} points awarded successfully`);
+        await loadParticipants(); // Refresh data
+      } else {
+        Alert.alert('Error', result.error || 'Failed to award points');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to award points');
     }
   };
 
@@ -342,7 +420,7 @@ const AdminPanel = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Admin Panel</Text>
+        <Text style={styles.headerTitle}>Admin Panel2</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity 
             style={[styles.resetGameButton, resettingRound && styles.disabledButton]}
@@ -424,6 +502,16 @@ const AdminPanel = ({ navigation }) => {
                     </TouchableOpacity>
                   </>
                 )}
+              </View>
+
+              {/* View Standings Button for Round 1 */}
+              <View style={styles.buttonRow}>
+                <TouchableOpacity 
+                  style={styles.standingsButton}
+                  onPress={() => navigation.navigate('Standings', { round: 1, isAdmin: true })}
+                >
+                  <Text style={styles.standingsButtonText}>📊 View Round 1 Standings</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -594,7 +682,79 @@ const AdminPanel = ({ navigation }) => {
                   </TouchableOpacity>
                 </View>
               )}
+
+              {/* View Standings Button for Round 2 */}
+              <View style={styles.buttonRow}>
+                <TouchableOpacity 
+                  style={styles.standingsButton}
+                  onPress={() => navigation.navigate('Standings', { round: 2, isAdmin: true })}
+                >
+                  <Text style={styles.standingsButtonText}>📊 View Round 2 Standings</Text>
+                </TouchableOpacity>
+              </View>
             </View>
+
+            {/* Buzzer Rankings for Current Question */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  Buzzer Responses - Question {gameState?.currentQuestion}
+                </Text>
+                <Text style={styles.buzzerInstructions}>
+                  Click on a team to award points: +20 (Correct), +0 (Pass), -10 (Wrong)
+                </Text>
+                {buzzerResponses.length === 0 ? (
+                  <View style={styles.noResponsesContainer}>
+                    <Text style={styles.noResponsesText}>
+                      {gameState?.round2BuzzerActive 
+                        ? '⏳ Waiting for teams to buzz in...' 
+                        : '🔔 Activate buzzer to start receiving responses'}
+                    </Text>
+                  </View>
+                ) : (
+                  buzzerResponses.map((response, index) => (
+                  <View key={response.id} style={styles.buzzerResponseRow}>
+                    <View style={styles.buzzerResponseInfo}>
+                      <Text style={styles.buzzerRank}>#{index + 1}</Text>
+                      <View style={styles.buzzerTeamInfo}>
+                        <Text style={styles.buzzerTeamName}>{response.teamName}</Text>
+                        <Text style={styles.buzzerResponseTime}>{response.responseTime}ms</Text>
+                      </View>
+                    </View>
+                    {!response.scored ? (
+                      <View style={styles.buzzerScoreButtons}>
+                        <TouchableOpacity 
+                          style={[styles.buzzerScoreButton, styles.scorePositive]}
+                          onPress={() => handleScoreBuzzer(response.userId, response.questionNumber, 20)}
+                        >
+                          <Text style={styles.buzzerScoreButtonText}>+20</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={[styles.buzzerScoreButton, styles.scoreNeutral]}
+                          onPress={() => handleScoreBuzzer(response.userId, response.questionNumber, 0)}
+                        >
+                          <Text style={styles.buzzerScoreButtonText}>+0</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={[styles.buzzerScoreButton, styles.scoreNegative]}
+                          onPress={() => handleScoreBuzzer(response.userId, response.questionNumber, -10)}
+                        >
+                          <Text style={styles.buzzerScoreButtonText}>-10</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={styles.buzzerScored}>
+                        <Text style={[
+                          styles.buzzerScoredText,
+                          { color: response.points > 0 ? theme.success : response.points < 0 ? theme.error : theme.textMuted }
+                        ]}>
+                          {response.points > 0 ? `+${response.points}` : response.points} ✓
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  ))
+                )}
+              </View>
 
             {/* Qualified Participants */}
             <View style={styles.section}>
@@ -897,6 +1057,109 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
     backgroundColor: theme.textMuted,
+  },
+  standingsButton: {
+    flex: 1,
+    backgroundColor: theme.accent,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 10,
+    borderWidth: 2,
+    borderColor: theme.primary,
+    ...shadows.medium,
+  },
+  standingsButtonText: {
+    color: theme.textPrimary,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  buzzerInstructions: {
+    ...typography.caption,
+    color: theme.textSecondary,
+    marginBottom: 15,
+    fontStyle: 'italic',
+  },
+  noResponsesContainer: {
+    padding: 20,
+    borderRadius: 8,
+    backgroundColor: theme.surfaceElevated,
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  noResponsesText: {
+    ...typography.body,
+    color: theme.textSecondary,
+    textAlign: 'center',
+  },
+  buzzerResponseRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: theme.surfaceElevated,
+    marginBottom: 10,
+    ...shadows.small,
+  },
+  buzzerResponseInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  buzzerRank: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.primary,
+    width: 40,
+  },
+  buzzerTeamInfo: {
+    flex: 1,
+  },
+  buzzerTeamName: {
+    ...typography.body,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  buzzerResponseTime: {
+    ...typography.caption,
+    color: theme.success,
+    fontWeight: 'bold',
+  },
+  buzzerScoreButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  buzzerScoreButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 60,
+    alignItems: 'center',
+    ...shadows.small,
+  },
+  scorePositive: {
+    backgroundColor: theme.success,
+  },
+  scoreNeutral: {
+    backgroundColor: theme.textMuted,
+  },
+  scoreNegative: {
+    backgroundColor: theme.error,
+  },
+  buzzerScoreButtonText: {
+    color: theme.textPrimary,
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  buzzerScored: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  buzzerScoredText: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

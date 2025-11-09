@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { theme, shadows, typography } from "../theme";
+import { FirebaseService } from "../firebase/gameService";
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -18,29 +19,33 @@ const LoginScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (email == "admin@csesa" && password == "arguemind") {
+    // Admin login (unchanged)
+    if (email === "admin@csesa" && password === "arguemind") {
       navigation.navigate("Admin");
-    } else {
-      navigation.navigate("Dashboard");
-
-      /*
+      return;
+    }
+    else {
+    // Firebase authentication for predefined users only
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
-    }*/
+    }
 
-      setLoading(true);
+    setLoading(true);
 
-      // Simulate login API call
-      setTimeout(() => {
-        setLoading(false);
-        // Simple validation for demo purposes
+    try {
+      // Login existing user
+      const result = await FirebaseService.loginUser(email, password);
+      if (result.success) {
         navigation.navigate("Dashboard");
-        /* if (email.includes('@') && password.length >= 6) {
       } else {
-        Alert.alert('Login Failed', 'Invalid email or password');
-      }*/
-      }, 1000);
+        Alert.alert('Authentication Failed', result.error || 'Invalid credentials. Please contact admin to get your login details.');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
     }
   };
 
@@ -52,7 +57,7 @@ const LoginScreen = ({ navigation }) => {
       >
         <View style={styles.loginContainer}>
           <Text style={styles.title}>Welcome to ArgueMind</Text>
-          <Text style={styles.subtitle}>Please sign in to continue</Text>
+          <Text style={styles.subtitle}>Sign in with your provided credentials</Text>
 
           <View style={styles.inputContainer}>
             <TextInput
@@ -65,6 +70,8 @@ const LoginScreen = ({ navigation }) => {
               autoCapitalize="none"
               autoCorrect={false}
             />
+
+
 
             <TextInput
               style={styles.input}
@@ -85,6 +92,12 @@ const LoginScreen = ({ navigation }) => {
                 {loading ? "Signing In..." : "Sign In"}
               </Text>
             </TouchableOpacity>
+
+            <View style={styles.infoContainer}>
+              <Text style={styles.infoText}>
+                Contact admin for login credentials
+              </Text>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -146,6 +159,15 @@ const styles = StyleSheet.create({
     color: theme.textPrimary,
     fontSize: 18,
     fontWeight: "600",
+  },
+  infoContainer: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  infoText: {
+    color: theme.textSecondary,
+    fontSize: 14,
+    fontStyle: "italic",
   },
 });
 

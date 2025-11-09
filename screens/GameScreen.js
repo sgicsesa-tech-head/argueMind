@@ -7,21 +7,23 @@ import {
   StyleSheet,
   Alert,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme, shadows, typography } from '../theme';
+import { FirebaseService } from '../firebase/gameService';
+import { useFirebase } from '../hooks/useFirebase';
 
 const GameScreen = ({ navigation, route }) => {
   const { roundNumber } = route.params || { roundNumber: 1 };
+  const { user, gameState, loading: firebaseLoading } = useFirebase();
   
-  // Game configuration
-  const TIMER_DURATION = 90; // seconds - make this editable
-  const QUESTIONS_TOTAL = 20; // 15-25 questions
-  
+  // Constants
+  const TIMER_DURATION = 90; // 90 seconds
+  const QUESTIONS_TOTAL = 20;
+
   // Game state
-  const [currentQuestion, setCurrentQuestion] = useState(1);
   const [userAnswer, setUserAnswer] = useState('');
-  const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
   const [isAnswered, setIsAnswered] = useState(false);
   const [userPoints, setUserPoints] = useState(0);
   const [showResult, setShowResult] = useState(false);
@@ -29,81 +31,233 @@ const GameScreen = ({ navigation, route }) => {
   const [showFeedback, setShowFeedback] = useState(false);
   const [lastSubmittedAnswer, setLastSubmittedAnswer] = useState('');
   const [submissionResult, setSubmissionResult] = useState(null); // 'correct', 'incorrect', or null
-  const [roundActive, setRoundActive] = useState(true); // Controlled by admin
+  const [userProfile, setUserProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
   
-  // Sample questions data (you'll replace this with your actual data)
-  const questions = [
-    {
-      id: 1,
-      word: 'ELEPHANT',
-      imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Elephant+Image',
-    },
-    {
-      id: 2,
-      word: 'BUTTERFLY',
-      imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Butterfly+Image',
-    },
-    // Add more questions...
-  ];
+  // Timer state - use local state for smooth countdown, sync with Firebase
+  const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
+  const [timerActive, setTimerActive] = useState(false);
   
-  const currentQuestionData = questions[currentQuestion - 1] || questions[0];
+  // State for questions data loaded from JSON
+  const [questionsData, setQuestionsData] = useState(null);
+  const [currentQuestion, setCurrentQuestion] = useState(null);
   
-  // Timer effect - runs universally for all users regardless of answer status
+  // Load questions data on mount
   useEffect(() => {
-    if (timeLeft > 0) {
-      const timer = setTimeout(() => {
-        setTimeLeft(timeLeft - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else if (timeLeft === 0) {
-      handleTimeUp();
+    loadQuestionsData();
+  }, []);
+
+  // Load user profile and set up real-time listeners
+  useEffect(() => {
+    if (user) {
+      loadUserProfile();
     }
-  }, [timeLeft]);
-  
-  const handleTimeUp = () => {
-    // Handle time up logic here - no popup
-    // Can add other logic like auto-moving to next question if needed
+  }, [user]);
+
+  // Listen to game state changes for question updates
+  useEffect(() => {
+    if (gameState && questionsData) {
+      // Load current question when game state or questions data changes
+      loadCurrentQuestion();
+      
+      // Reset answer state when question changes
+      if (gameState.currentQuestion !== userProfile?.lastAnsweredQuestion) {
+        setUserAnswer('');
+        setIsAnswered(false);
+        setShowFeedback(false);
+        setSubmissionResult(null);
+        setLastSubmittedAnswer('');
+      }
+    }
+  }, [gameState?.currentQuestion, questionsData]);
+
+  // Timer effect - sync with Firebase when it changes (only on question change or admin control)
+  useEffect(() => {
+    if (gameState) {
+      const fbTimeLeft = gameState.timeRemaining || 0;
+      const fbTimerActive = gameState.timerActive || false;
+      
+      // Only update when there's a significant change (new question or admin control)
+      setTimeLeft(fbTimeLeft);
+      setTimerActive(fbTimerActive);
+    }
+  }, [gameState?.currentQuestion, gameState?.timerActive]);
+
+  // Local timer countdown effect (like old working code) - runs independently
+  useEffect(() => {
+    let timer;
+    
+    // Simple countdown like the old code - only depends on local state
+    if (timerActive && timeLeft > 0) {
+      timer = setTimeout(() => {
+        setTimeLeft(prev => {
+          const newTime = Math.max(0, prev - 1);
+          // When timer reaches 0, stop it and it stays at 0
+          if (newTime === 0) {
+            setTimerActive(false);
+          }
+          return newTime;
+        });
+      }, 1000);
+    }
+    
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [timeLeft, timerActive]);
+
+  const loadQuestionsData = async () => {
+    try {
+      const result = await FirebaseService.loadQuestionsData();
+      if (result.success) {
+        setQuestionsData(result.data);
+      } else {
+        console.error('Failed to load questions:', result.error);
+        Alert.alert('Error', 'Failed to load questions data');
+      }
+    } catch (error) {
+      console.error('Error loading questions:', error);
+    }
+  };
+
+  const loadCurrentQuestion = async () => {
+    try {
+      if (gameState?.currentRound === 1) {
+        const result = await FirebaseService.getCurrentQuestion(1);
+        if (result.success) {
+          setCurrentQuestion(result.question);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading current question:', error);
+    }
+  };
+
+  const loadUserProfile = async () => {
+    try {
+      const profile = await FirebaseService.getUserProfile(user.uid);
+      if (profile.success) {
+        setUserProfile(profile.data);
+        setUserPoints(profile.data.round1Score || 0);
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    } finally {
+      setLoading(false);
+    }
   };
   
-  const handleSubmit = () => {
+  const getCurrentQuestionData = () => {
+    // Return current question from state, or fallback to first question from data
+    if (currentQuestion) {
+      return {
+        ...currentQuestion,
+        imageUrl: currentQuestion.image // Map 'image' to 'imageUrl' for compatibility
+      };
+    }
+    
+    // Fallback to first question if available
+    if (questionsData?.round1Questions?.length > 0) {
+      const fallback = questionsData.round1Questions[0];
+      return {
+        ...fallback,
+        imageUrl: fallback.image
+      };
+    }
+    
+    // Default fallback
+    return {
+      id: 1,
+      word: 'LOADING',
+      imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Loading...',
+      points: 10
+    };
+  };
+  
+  const handleSubmit = async () => {
     if (!userAnswer.trim()) {
       Alert.alert('Error', 'Please enter an answer');
       return;
     }
     
-    // Store the submitted answer and check if correct
-    const isCorrect = userAnswer.toUpperCase() === currentQuestionData.word.toUpperCase();
-    setLastSubmittedAnswer(userAnswer.toUpperCase());
-    setSubmissionResult(isCorrect ? 'correct' : 'incorrect');
+    if (!currentQuestion) {
+      Alert.alert('Error', 'Question not loaded. Please wait...');
+      return;
+    }
     
-    if (isCorrect) {
-      // Calculate points based on time and rank (simplified for now)
-      const timeTaken = TIMER_DURATION - timeLeft;
-      const basePoints = 200;
-      const timeBonus = Math.max(0, Math.floor((timeLeft / TIMER_DURATION) * 50));
-      const earnedPoints = basePoints + timeBonus;
+    setLastSubmittedAnswer(userAnswer.toUpperCase());
+    
+    try {
+      // Validate answer using Firebase service
+      const validationResult = await FirebaseService.validateAnswer(
+        currentQuestion.id,
+        userAnswer.trim(),
+        gameState?.currentRound || 1
+      );
+
+      if (!validationResult.success) {
+        Alert.alert('Error', validationResult.error);
+        return;
+      }
+
+      const isCorrect = validationResult.isCorrect;
       
-      setUserPoints(userPoints + earnedPoints);
-      setResultMessage(`✅ Correct! +${earnedPoints} points`);
-      setIsAnswered(true);
+      setSubmissionResult(isCorrect ? 'correct' : 'incorrect');
       
-      // Show correct feedback for 2 seconds, then show waiting message
-      setTimeout(() => {
-        setShowResult(true);
-      }, 2000);
-    } else {
-      // For wrong answers, show feedback but keep input field active
-      setResultMessage('❌ Incorrect answer! Try again.');
-      setShowFeedback(true);
-      setUserAnswer(''); // Clear the input for next attempt
-      
-      // Show feedback briefly then clear submission result
-      setTimeout(() => {
-        setResultMessage('');
-        setShowFeedback(false);
-        setSubmissionResult(null);
-        setLastSubmittedAnswer('');
-      }, 2000);
+      // Submit answer to Firebase (points calculated based on ranking)
+      const result = await FirebaseService.submitAnswer(
+        user.uid,
+        gameState?.currentQuestion || 1,
+        userAnswer.trim(),
+        gameState?.currentRound || 1,
+        isCorrect
+      );
+
+      if (result.success) {
+        const earnedPoints = result.points || 0;
+        
+        if (isCorrect) {
+          setUserPoints(userPoints + earnedPoints);
+          setResultMessage(`🎉 Correct! +${earnedPoints} points`);
+          setIsAnswered(true);
+          
+          // Update local user profile
+          if (userProfile) {
+            const updatedProfile = {
+              ...userProfile,
+              round1Score: (userProfile.round1Score || 0) + earnedPoints,
+              lastAnsweredQuestion: gameState?.currentQuestion || 1
+            };
+            setUserProfile(updatedProfile);
+          }
+          
+          // Show correct feedback for 2 seconds, then show waiting message
+          setTimeout(() => {
+            setResultMessage('Waiting for admin to move to next question...');
+            setShowFeedback(true);
+          }, 2000);
+        } else {
+          setResultMessage(`❌ Incorrect! The answer was: ${validationResult.correctAnswer}`);
+          setShowFeedback(true);
+          setUserAnswer(''); // Clear for retry
+          
+          // Clear feedback after 3 seconds for incorrect answers
+          setTimeout(() => {
+            setResultMessage('');
+            setShowFeedback(false);
+            setSubmissionResult(null);
+            setLastSubmittedAnswer('');
+          }, 3000);
+        }
+        setShowFeedback(true);
+      } else {
+        Alert.alert('Error', 'Failed to submit answer. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error submitting answer:', error);
+      Alert.alert('Error', 'Failed to submit answer. Please try again.');
     }
   };
   
@@ -152,19 +306,52 @@ const GameScreen = ({ navigation, route }) => {
     });
   };
 
+  // Check if user can access the round
+  if (loading || firebaseLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={styles.loadingText}>Loading game...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!gameState?.round1Active) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.waitingContainer}>
+          <Text style={styles.waitingTitle}>Round 1 Not Active</Text>
+          <Text style={styles.waitingText}>Please wait for the admin to start Round 1</Text>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.navigate('Dashboard')}
+          >
+            <Text style={styles.backButtonText}>Back to Dashboard</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const currentQuestionData = getCurrentQuestionData();
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Round {roundNumber}</Text>
-        <Text style={styles.questionCounter}>Question {currentQuestion}/{QUESTIONS_TOTAL}</Text>
+        <Text style={styles.questionCounter}>
+          Question {gameState?.currentQuestion || 1}/{gameState?.round1TotalQuestions || 20}
+        </Text>
         <View style={styles.timerContainer}>
           <Text style={[styles.timer, { color: getTimerColor() }]}>
             {formatTime(timeLeft)}
           </Text>
-          {isAnswered && timeLeft > 0 && (
-            <Text style={styles.timerSubtext}>Next question in</Text>
-          )}
+          <Text style={styles.timerSubtext}>
+            {timerActive ? 'Timer Active' : timeLeft === 0 ? 'Time Up!' : 'Timer Stopped'}
+          </Text>
         </View>
       </View>
       
@@ -222,14 +409,14 @@ const GameScreen = ({ navigation, route }) => {
               onChangeText={setUserAnswer}
               autoCapitalize="characters"
               autoCorrect={false}
-              editable={timeLeft > 0 && !isAnswered}
+              editable={timeLeft > 0 && timerActive && !isAnswered}
               maxLength={currentQuestionData.word.length}
             />
             
             <TouchableOpacity 
-              style={[styles.submitButton, (timeLeft === 0 || isAnswered) && styles.disabledButton]}
+              style={[styles.submitButton, (timeLeft === 0 || !timerActive || isAnswered) && styles.disabledButton]}
               onPress={handleSubmit}
-              disabled={timeLeft === 0 || isAnswered}
+              disabled={timeLeft === 0 || !timerActive || isAnswered}
             >
               <Text style={styles.submitButtonText}>Submit</Text>
             </TouchableOpacity>
@@ -265,23 +452,59 @@ const GameScreen = ({ navigation, route }) => {
         )}
       </View>
       
-      {/* Admin Controls (temporary - will be separate admin panel) */}
-      <View style={styles.adminControls}>
+      {/* Bottom Controls */}
+      <View style={styles.bottomControls}>
+        <TouchableOpacity 
+          style={styles.backToDashboard}
+          onPress={() => navigation.navigate('Dashboard')}
+        >
+          <Text style={styles.backToDashboardText}>← Dashboard</Text>
+        </TouchableOpacity>
+        
+        {/* Timer Control Button */}
+        <TouchableOpacity 
+          style={[styles.timerControlButton, timerActive && styles.timerActiveButton]}
+          onPress={async () => {
+            try {
+              if (timerActive) {
+                // Stop timer
+                await FirebaseService.stopTimer();
+                Alert.alert('Timer Stopped', 'Timer has been stopped for all participants');
+              } else {
+                // Start timer
+                await FirebaseService.startTimer(90);
+                Alert.alert('Timer Started', '90-second timer started for all participants');
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to control timer');
+            }
+          }}
+        >
+          <Text style={styles.timerControlButtonText}>
+            {timerActive ? 'Stop Timer' : 'Start Timer (90s)'}
+          </Text>
+        </TouchableOpacity>
+        
         <TouchableOpacity 
           style={styles.adminButton}
-          onPress={() => {
-            // Simulate admin clicking next question - timer resets for all users
-            if (currentQuestion < QUESTIONS_TOTAL) {
-              setCurrentQuestion(currentQuestion + 1);
-              setUserAnswer('');
-              setTimeLeft(TIMER_DURATION); // Reset timer for all users
-              setIsAnswered(false);
-              setShowResult(false);
-              setResultMessage('');
-              setShowFeedback(false);
-              setLastSubmittedAnswer('');
-              setSubmissionResult(null);
-              setRoundActive(true); // Reactivate round
+          onPress={async () => {
+            // Admin clicks next question - NO AUTOMATIC TIMER START
+            const currentQuestionNum = gameState?.currentQuestion || 1;
+            if (currentQuestionNum < QUESTIONS_TOTAL) {
+              try {
+                await FirebaseService.nextQuestion(1);
+                // Reset local answer state
+                setUserAnswer('');
+                setIsAnswered(false);
+                setShowResult(false);
+                setResultMessage('');
+                setShowFeedback(false);
+                setLastSubmittedAnswer('');
+                setSubmissionResult(null);
+                Alert.alert('Next Question', 'Moved to next question. Click "Start Timer" when ready.');
+              } catch (error) {
+                Alert.alert('Error', 'Failed to advance question');
+              }
             } else {
               // Game finished, show standings
               navigation.navigate('Standings', { points: userPoints });
@@ -289,15 +512,15 @@ const GameScreen = ({ navigation, route }) => {
           }}
         >
           <Text style={styles.adminButtonText}>
-            {currentQuestion < QUESTIONS_TOTAL ? 'Next Question (Admin)' : 'View Standings'}
+            {(gameState?.currentQuestion || 1) < QUESTIONS_TOTAL ? 'Next Question' : 'View Standings'}
           </Text>
         </TouchableOpacity>
-        
-        <View style={styles.adminInfo}>
-          <Text style={styles.adminInfoText}>
-            Timer runs universally for all players • Controlled by admin
-          </Text>
-        </View>
+      </View>
+      
+      <View style={styles.adminInfo}>
+        <Text style={styles.adminInfoText}>
+          Timer runs universally for all players • Controlled by admin
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -307,6 +530,44 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: theme.textSecondary,
+    marginTop: 10,
+    fontSize: 16,
+  },
+  waitingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  waitingTitle: {
+    ...typography.h2,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  waitingText: {
+    ...typography.body,
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  backButton: {
+    backgroundColor: theme.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    ...shadows.medium,
+  },
+  backButtonText: {
+    color: theme.textPrimary,
+    fontWeight: '600',
+    fontSize: 16,
   },
   header: {
     backgroundColor: theme.surface,
@@ -326,6 +587,7 @@ const styles = StyleSheet.create({
   },
   timerContainer: {
     alignItems: 'center',
+    minWidth: 80,
   },
   timer: {
     fontSize: 18,
@@ -487,17 +749,52 @@ const styles = StyleSheet.create({
     color: theme.textSecondary,
     fontStyle: 'italic',
   },
-  adminControls: {
+  bottomControls: {
     padding: 20,
     backgroundColor: theme.surface,
     borderTopWidth: 1,
     borderTopColor: theme.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  backToDashboard: {
+    backgroundColor: theme.secondary,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 8,
+    ...shadows.small,
+  },
+  backToDashboardText: {
+    color: theme.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  timerControlButton: {
+    backgroundColor: theme.success,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginHorizontal: 10,
+    ...shadows.small,
+  },
+  timerActiveButton: {
+    backgroundColor: theme.error,
+  },
+  timerControlButtonText: {
+    color: theme.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
   },
   adminButton: {
-    backgroundColor: theme.secondary,
+    backgroundColor: theme.primary,
     borderRadius: 8,
     paddingVertical: 12,
+    paddingHorizontal: 15,
     alignItems: 'center',
+    flex: 1,
     ...shadows.small,
   },
   adminButtonText: {
@@ -506,7 +803,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   adminInfo: {
-    marginTop: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: theme.surface,
     alignItems: 'center',
   },
   adminInfoText: {

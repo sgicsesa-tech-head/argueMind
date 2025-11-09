@@ -1,0 +1,144 @@
+{
+  "round1Questions": [
+    {
+      "id": 1,
+      "word": "butterfly",
+      "image": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&h=600&fit=crop",
+      "difficulty": "easy",
+      "points": 10
+    },
+    {
+      "id": 2,
+      "word": "telescope",
+      "image": "https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=800&h=600&fit=crop",
+      "difficulty": "medium",
+      "points": 15
+    },
+    {
+      "id": 3,
+      "word": "lighthouse",
+      "image": "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&h=600&fit=crop",
+      "difficulty": "medium",
+      "points": 15
+    },
+    {
+      "id": 4,
+      "word": "umbrella",
+      "image": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop",
+      "difficulty": "easy",
+      "points": 10
+    },
+    {
+      "id": 5,
+      "word": "calculator",
+      "image": "https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=800&h=600&fit=crop",
+      "difficulty": "medium",
+      "points": 15
+    },
+    {
+      "id": 6,
+      "word": "helicopter",
+      "image": "https://images.unsplash.com/photo-1518896012205-4b2422854ab8?w=800&h=600&fit=crop",
+      "difficulty": "hard",
+      "points": 20
+    },
+    {
+      "id": 7,
+      "word": "sandwich",
+      "image": "https://images.unsplash.com/photo-1553909489-cd47e0ef937f?w=800&h=600&fit=crop",
+      "difficulty": "easy",
+      "points": 10
+    },
+    {
+      "id": 8,
+      "word": "keyboard",
+      "image": "https://images.unsplash.com/photo-1541140532154-b024d705b90a?w=800&h=600&fit=crop",
+      "difficulty": "easy",
+      "points": 10
+    },
+    {
+      "id": 9,
+      "word": "microscope",
+      "image": "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=800&h=600&fit=crop",
+      "difficulty": "hard",
+      "points": 20
+    },
+    {
+      "id": 10,
+      "word": "sunglasses",
+      "image": "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=800&h=600&fit=crop",
+      "difficulty": "medium",
+      "points": 15
+    },
+    {
+      "id": 11,
+      "word": "dinosaur",
+      "image": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop",
+      "difficulty": "easy",
+      "points": 10
+    },
+    {
+      "id": 12,
+      "word": "refrigerator",
+      "image": "https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?w=800&h=600&fit=crop",
+      "difficulty": "hard",
+      "points": 20
+    },
+    {
+      "id": 13,
+      "word": "basketball",
+      "image": "https://images.unsplash.com/photo-1546519638-68e109498573?w=800&h=600&fit=crop",
+      "difficulty": "medium",
+      "points": 15
+    },
+    {
+      "id": 14,
+      "word": "elephant",
+      "image": "https://images.unsplash.com/photo-1564760055775-d63b17a55c44?w=800&h=600&fit=crop",
+      "difficulty": "easy",
+      "points": 10
+    },
+    {
+      "id": 15,
+      "word": "chocolate",
+      "image": "https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=800&h=600&fit=crop",
+      "difficulty": "easy",
+      "points": 10
+    },
+    {
+      "id": 16,
+      "word": "watermelon",
+      "image": "https://images.unsplash.com/photo-1587049633312-d628ae50a8ae?w=800&h=600&fit=crop",
+      "difficulty": "medium",
+      "points": 15
+    },
+    {
+      "id": 17,
+      "word": "rainbow",
+      "image": "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&h=600&fit=crop",
+      "difficulty": "easy",
+      "points": 10
+    },
+    {
+      "id": 18,
+      "word": "volcano",
+      "image": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop",
+      "difficulty": "hard",
+      "points": 20
+    },
+    {
+      "id": 19,
+      "word": "penguin",
+      "image": "https://images.unsplash.com/photo-1551986782-d0169b3f8fa7?w=800&h=600&fit=crop",
+      "difficulty": "medium",
+      "points": 15
+    },
+    {
+      "id": 20,
+      "word": "tornado",
+      "image": "https://images.unsplash.com/photo-1527482797697-8795b05a13fe?w=800&h=600&fit=crop",
+      "difficulty": "hard",
+      "points": 20
+    }
+  ]
+}
