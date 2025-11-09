@@ -59,7 +59,7 @@ const AdminPanel = ({ navigation }) => {
     try {
       const result = await FirebaseService.enableRound1();
       if (result.success) {
-        Alert.alert('Round 1 Started', 'All participants can now see Question 1. Click "Start Timer" to begin the countdown!');
+        Alert.alert('Round 1 Started', 'All participants can now see Question 1 with active timer!');
       } else {
         Alert.alert('Error', result.error || 'Failed to start Round 1');
       }
@@ -77,7 +77,7 @@ const AdminPanel = ({ navigation }) => {
     
     Alert.alert(
       'Next Question',
-      `Move all participants to Question ${nextQuestion}? (Timer will NOT start automatically)`,
+      `Move all participants to Question ${nextQuestion} with fresh timer?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -86,7 +86,7 @@ const AdminPanel = ({ navigation }) => {
             try {
               const result = await FirebaseService.nextQuestion(1);
               if (result.success) {
-                Alert.alert('Success', `All participants moved to Question ${nextQuestion}. Click "Start Timer" when ready.`);
+                Alert.alert('Success', `All participants moved to Question ${nextQuestion} with 90-second timer!`);
               } else {
                 Alert.alert('Error', result.error || 'Failed to update question');
               }

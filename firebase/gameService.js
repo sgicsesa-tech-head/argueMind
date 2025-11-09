@@ -10,6 +10,7 @@ import {
   where, 
   orderBy,
   addDoc,
+  deleteDoc,
   serverTimestamp
 } from 'firebase/firestore';
 import { 
@@ -276,13 +277,12 @@ export class FirebaseService {
       currentRound: 1,
       currentQuestion: 1,
       timerActive: false,
-      timeRemaining: 90
+      timeRemaining: 90,
+      timerStartTime: null
     });
     
-    if (result.success) {
-      // Start the timer automatically
-      await this.startTimer(90);
-    }
+    // DO NOT auto-start timer - let admin control when to start
+    // Admin needs to manually click "Start Timer" 
     
     return result;
   }
@@ -299,19 +299,18 @@ export class FirebaseService {
         // Stop current timer first
         this.stopTimer();
         
-        // Update game state
+        // Update game state - Reset timer but don't start it automatically
         const result = await this.updateGameState({
           currentQuestion: currentQuestion,
           timerActive: false,
           timeRemaining: 90,
+          timerStartTime: null,
           round2BuzzerActive: false,
           round2QuestionActive: round === 2 ? false : gameData.round2QuestionActive
         });
         
-        // Start new timer for the next question
-        if (result.success) {
-          await this.startTimer(90);
-        }
+        // DO NOT auto-start timer - let admin control when to start
+        // Admin needs to manually click "Start Timer" for each question
         
         return result;
       }
@@ -336,13 +335,12 @@ export class FirebaseService {
         currentRound: 2,
         currentQuestion: 1,
         timerActive: false,
-        timeRemaining: 90
+        timeRemaining: 90,
+        timerStartTime: null
       });
       
-      // Start timer for Round 2
-      if (result.success) {
-        await this.startTimer(90);
-      }
+      // DO NOT auto-start timer - let admin control when to start
+      // Admin needs to manually click "Start Timer" 
       
       return result;
     } catch (error) {
@@ -363,7 +361,7 @@ export class FirebaseService {
     });
   }
 
-  // Timer Management - NEW
+  // Timer Management - Fixed
   static timerInterval = null;
 
   static async startTimer(duration = 90) {
@@ -378,7 +376,7 @@ export class FirebaseService {
         timerStartTime: serverTimestamp()
       });
 
-      // Start countdown on server side
+      // Start countdown with proper 1-second intervals
       this.timerInterval = setInterval(async () => {
         try {
           const gameRef = doc(db, 'gameState', 'current');
@@ -386,29 +384,38 @@ export class FirebaseService {
           
           if (gameDoc.exists()) {
             const gameData = gameDoc.data();
-            const currentTime = gameData.timeRemaining || duration;
+            const currentTime = gameData.timeRemaining || 0;
             
             if (currentTime > 0 && gameData.timerActive) {
               // Decrease timer by 1 second
-              await updateDoc(gameRef, {
-                timeRemaining: currentTime - 1,
-                lastUpdated: serverTimestamp()
-              });
-            } else if (currentTime <= 0) {
-              // Timer finished
-              await this.stopTimer();
-              await updateDoc(gameRef, {
-                timerActive: false,
-                timeRemaining: 0,
-                lastUpdated: serverTimestamp()
-              });
+              const newTime = Math.max(0, currentTime - 1);
+              
+              if (newTime === 0) {
+                // Timer finished - stop it and keep at 0
+                this.stopTimer();
+                await updateDoc(gameRef, {
+                  timerActive: false,
+                  timeRemaining: 0,
+                  lastUpdated: serverTimestamp()
+                });
+                console.log('Timer finished - staying at 0');
+              } else {
+                // Continue countdown
+                await updateDoc(gameRef, {
+                  timeRemaining: newTime,
+                  lastUpdated: serverTimestamp()
+                });
+              }
+            } else {
+              // Timer is not active or already at 0, stop the interval
+              this.stopTimer();
             }
           }
         } catch (error) {
           console.error('Timer update error:', error);
           this.stopTimer();
         }
-      }, 1000);
+      }, 1000); // Update exactly every 1 second
 
       return { success: true };
     } catch (error) {
@@ -851,13 +858,14 @@ export class FirebaseService {
       this.stopTimer();
       
       if (roundNumber === 1) {
-        // Reset Round 1
+        // Reset Round 1 - keep inactive until admin starts it
         const result = await this.updateGameState({
-          round1Active: true,
+          round1Active: false,
           currentQuestion: 1,
           timerActive: false,
           timeRemaining: 90,
-          gameStarted: true
+          timerStartTime: null,
+          gameStarted: false
         });
         
         // Clear all Round 1 answers
@@ -868,7 +876,7 @@ export class FirebaseService {
         const answersSnapshot = await getDocs(answersQuery);
         
         // Delete all Round 1 answers
-        const deletePromises = answersSnapshot.docs.map(doc => doc.ref.delete());
+        const deletePromises = answersSnapshot.docs.map(docRef => deleteDoc(docRef.ref));
         await Promise.all(deletePromises);
         
         // Reset all user Round 1 scores
@@ -889,12 +897,13 @@ export class FirebaseService {
         
         return result;
       } else if (roundNumber === 2) {
-        // Reset Round 2
+        // Reset Round 2 - keep inactive until admin starts it
         const result = await this.updateGameState({
-          round2Active: true,
+          round2Active: false,
           currentQuestion: 1,
           timerActive: false,
           timeRemaining: 90,
+          timerStartTime: null,
           round2QuestionActive: false,
           round2BuzzerActive: false
         });
@@ -911,8 +920,8 @@ export class FirebaseService {
         
         // Delete all Round 2 data
         const deletePromises = [
-          ...answersSnapshot.docs.map(doc => doc.ref.delete()),
-          ...buzzerSnapshot.docs.map(doc => doc.ref.delete())
+          ...answersSnapshot.docs.map(docRef => deleteDoc(docRef.ref)),
+          ...buzzerSnapshot.docs.map(docRef => deleteDoc(docRef.ref))
         ];
         await Promise.all(deletePromises);
         
@@ -936,6 +945,91 @@ export class FirebaseService {
       }
       
       return { success: false, error: 'Invalid round number' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Complete Game Reset - Resets everything to initial state
+  static async resetGame() {
+    try {
+      // Stop any active timer
+      this.stopTimer();
+      
+      // Reset game state to initial values
+      const result = await this.updateGameState({
+        round1Active: false,
+        round2Active: false,
+        currentRound: 1,
+        currentQuestion: 1,
+        timerActive: false,
+        timeRemaining: 90,
+        timerStartTime: null,
+        round2QuestionActive: false,
+        round2BuzzerActive: false,
+        gameStarted: false,
+        gameEnded: false
+      });
+      
+      if (!result.success) {
+        return result;
+      }
+      
+      // Clear all answers for both rounds
+      const answersQuery = collection(db, 'answers');
+      const answersSnapshot = await getDocs(answersQuery);
+      
+      // Clear all buzzer responses
+      const buzzerQuery = collection(db, 'buzzerResponses');
+      const buzzerSnapshot = await getDocs(buzzerQuery);
+      
+      // Delete all game data
+      const deletePromises = [
+        ...answersSnapshot.docs.map(docRef => deleteDoc(docRef.ref)),
+        ...buzzerSnapshot.docs.map(docRef => deleteDoc(docRef.ref))
+      ];
+      await Promise.all(deletePromises);
+      
+      // Reset all user scores and states (keep user accounts but reset game progress)
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('isAdmin', '==', false)
+      );
+      const usersSnapshot = await getDocs(usersQuery);
+      
+      const updateUserPromises = usersSnapshot.docs.map(userDoc => 
+        updateDoc(userDoc.ref, {
+          round1Score: 0,
+          round2Score: 0,
+          totalScore: 0,
+          round1Rank: null,
+          round2Rank: null,
+          finalRank: null,
+          qualified: false,
+          lastAnsweredQuestion: 0,
+          lastActive: serverTimestamp()
+        })
+      );
+      await Promise.all(updateUserPromises);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error resetting game:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Reset buzzer responses for current round
+  static async resetBuzzerRound() {
+    try {
+      const buzzerQuery = collection(db, 'buzzerResponses');
+      const buzzerSnapshot = await getDocs(buzzerQuery);
+      
+      // Delete all buzzer responses
+      const deletePromises = buzzerSnapshot.docs.map(docRef => deleteDoc(docRef.ref));
+      await Promise.all(deletePromises);
+      
+      return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }

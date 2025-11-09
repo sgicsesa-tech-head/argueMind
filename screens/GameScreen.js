@@ -34,8 +34,9 @@ const GameScreen = ({ navigation, route }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  // Timer state - get from gameState
-  const timeLeft = gameState?.timeRemaining || TIMER_DURATION;
+  // Timer state - use local state for smooth countdown, sync with Firebase
+  const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
+  const [timerActive, setTimerActive] = useState(false);
   
   // State for questions data loaded from JSON
   const [questionsData, setQuestionsData] = useState(null);
@@ -69,6 +70,43 @@ const GameScreen = ({ navigation, route }) => {
       }
     }
   }, [gameState?.currentQuestion, questionsData]);
+
+  // Timer effect - sync with Firebase when it changes (only on question change or admin control)
+  useEffect(() => {
+    if (gameState) {
+      const fbTimeLeft = gameState.timeRemaining || 0;
+      const fbTimerActive = gameState.timerActive || false;
+      
+      // Only update when there's a significant change (new question or admin control)
+      setTimeLeft(fbTimeLeft);
+      setTimerActive(fbTimerActive);
+    }
+  }, [gameState?.currentQuestion, gameState?.timerActive]);
+
+  // Local timer countdown effect (like old working code) - runs independently
+  useEffect(() => {
+    let timer;
+    
+    // Simple countdown like the old code - only depends on local state
+    if (timerActive && timeLeft > 0) {
+      timer = setTimeout(() => {
+        setTimeLeft(prev => {
+          const newTime = Math.max(0, prev - 1);
+          // When timer reaches 0, stop it and it stays at 0
+          if (newTime === 0) {
+            setTimerActive(false);
+          }
+          return newTime;
+        });
+      }, 1000);
+    }
+    
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [timeLeft, timerActive]);
 
   const loadQuestionsData = async () => {
     try {
@@ -311,7 +349,9 @@ const GameScreen = ({ navigation, route }) => {
           <Text style={[styles.timer, { color: getTimerColor() }]}>
             {formatTime(timeLeft)}
           </Text>
-          <Text style={styles.timerSubtext}>Universal Timer</Text>
+          <Text style={styles.timerSubtext}>
+            {timerActive ? 'Timer Active' : timeLeft === 0 ? 'Time Up!' : 'Timer Stopped'}
+          </Text>
         </View>
       </View>
       
@@ -369,14 +409,14 @@ const GameScreen = ({ navigation, route }) => {
               onChangeText={setUserAnswer}
               autoCapitalize="characters"
               autoCorrect={false}
-              editable={timeLeft > 0 && !isAnswered}
+              editable={timeLeft > 0 && timerActive && !isAnswered}
               maxLength={currentQuestionData.word.length}
             />
             
             <TouchableOpacity 
-              style={[styles.submitButton, (timeLeft === 0 || isAnswered) && styles.disabledButton]}
+              style={[styles.submitButton, (timeLeft === 0 || !timerActive || isAnswered) && styles.disabledButton]}
               onPress={handleSubmit}
-              disabled={timeLeft === 0 || isAnswered}
+              disabled={timeLeft === 0 || !timerActive || isAnswered}
             >
               <Text style={styles.submitButtonText}>Submit</Text>
             </TouchableOpacity>
@@ -421,10 +461,34 @@ const GameScreen = ({ navigation, route }) => {
           <Text style={styles.backToDashboardText}>← Dashboard</Text>
         </TouchableOpacity>
         
+        {/* Timer Control Button */}
+        <TouchableOpacity 
+          style={[styles.timerControlButton, timerActive && styles.timerActiveButton]}
+          onPress={async () => {
+            try {
+              if (timerActive) {
+                // Stop timer
+                await FirebaseService.stopTimer();
+                Alert.alert('Timer Stopped', 'Timer has been stopped for all participants');
+              } else {
+                // Start timer
+                await FirebaseService.startTimer(90);
+                Alert.alert('Timer Started', '90-second timer started for all participants');
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to control timer');
+            }
+          }}
+        >
+          <Text style={styles.timerControlButtonText}>
+            {timerActive ? 'Stop Timer' : 'Start Timer (90s)'}
+          </Text>
+        </TouchableOpacity>
+        
         <TouchableOpacity 
           style={styles.adminButton}
           onPress={async () => {
-            // Admin clicks next question - updates for all users via Firebase
+            // Admin clicks next question - NO AUTOMATIC TIMER START
             const currentQuestionNum = gameState?.currentQuestion || 1;
             if (currentQuestionNum < QUESTIONS_TOTAL) {
               try {
@@ -437,6 +501,7 @@ const GameScreen = ({ navigation, route }) => {
                 setShowFeedback(false);
                 setLastSubmittedAnswer('');
                 setSubmissionResult(null);
+                Alert.alert('Next Question', 'Moved to next question. Click "Start Timer" when ready.');
               } catch (error) {
                 Alert.alert('Error', 'Failed to advance question');
               }
@@ -447,7 +512,7 @@ const GameScreen = ({ navigation, route }) => {
           }}
         >
           <Text style={styles.adminButtonText}>
-            {(gameState?.currentQuestion || 1) < QUESTIONS_TOTAL ? 'Next Question (Admin)' : 'View Standings'}
+            {(gameState?.currentQuestion || 1) < QUESTIONS_TOTAL ? 'Next Question' : 'View Standings'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -692,6 +757,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
   },
   backToDashboard: {
     backgroundColor: theme.secondary,
@@ -705,14 +772,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  timerControlButton: {
+    backgroundColor: theme.success,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginHorizontal: 10,
+    ...shadows.small,
+  },
+  timerActiveButton: {
+    backgroundColor: theme.error,
+  },
+  timerControlButtonText: {
+    color: theme.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   adminButton: {
     backgroundColor: theme.primary,
     borderRadius: 8,
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
     alignItems: 'center',
     flex: 1,
-    marginLeft: 15,
     ...shadows.small,
   },
   adminButtonText: {
