@@ -27,6 +27,8 @@ const GameScreen = ({ navigation, route }) => {
   const [showResult, setShowResult] = useState(false);
   const [resultMessage, setResultMessage] = useState('');
   const [showFeedback, setShowFeedback] = useState(false);
+  const [lastSubmittedAnswer, setLastSubmittedAnswer] = useState('');
+  const [submissionResult, setSubmissionResult] = useState(null); // 'correct', 'incorrect', or null
   
   // Sample questions data (you'll replace this with your actual data)
   const questions = [
@@ -34,13 +36,11 @@ const GameScreen = ({ navigation, route }) => {
       id: 1,
       word: 'ELEPHANT',
       imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Elephant+Image',
-      underlines: '_ _ _ _ _ _ _ _'
     },
     {
       id: 2,
       word: 'BUTTERFLY',
       imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Butterfly+Image',
-      underlines: '_ _ _ _ _ _ _ _ _'
     },
     // Add more questions...
   ];
@@ -70,8 +70,10 @@ const GameScreen = ({ navigation, route }) => {
       return;
     }
     
-    // Check answer (case insensitive)
+    // Store the submitted answer and check if correct
     const isCorrect = userAnswer.toUpperCase() === currentQuestionData.word.toUpperCase();
+    setLastSubmittedAnswer(userAnswer.toUpperCase());
+    setSubmissionResult(isCorrect ? 'correct' : 'incorrect');
     
     if (isCorrect) {
       // Calculate points based on time and rank (simplified for now)
@@ -81,19 +83,25 @@ const GameScreen = ({ navigation, route }) => {
       const earnedPoints = basePoints + timeBonus;
       
       setUserPoints(userPoints + earnedPoints);
-      setResultMessage(`Correct! +${earnedPoints} points`);
+      setResultMessage(`✅ Correct! +${earnedPoints} points`);
       setIsAnswered(true);
-      setShowResult(true);
+      
+      // Show correct feedback for 2 seconds, then show waiting message
+      setTimeout(() => {
+        setShowResult(true);
+      }, 2000);
     } else {
       // For wrong answers, show feedback but keep input field active
       setResultMessage('❌ Incorrect answer! Try again.');
       setShowFeedback(true);
       setUserAnswer(''); // Clear the input for next attempt
       
-      // Show feedback briefly then clear it
+      // Show feedback briefly then clear submission result
       setTimeout(() => {
         setResultMessage('');
         setShowFeedback(false);
+        setSubmissionResult(null);
+        setLastSubmittedAnswer('');
       }, 2000);
     }
   };
@@ -108,6 +116,39 @@ const GameScreen = ({ navigation, route }) => {
     if (timeLeft <= 10) return '#e74c3c';
     if (timeLeft <= 30) return '#f39c12';
     return '#2ecc71';
+  };
+
+  // Generate interactive underlines that fill in as user types
+  const generateInteractiveWord = () => {
+    const targetWord = currentQuestionData.word.toUpperCase();
+    
+    // For display purposes, use lastSubmittedAnswer if we're showing feedback, otherwise current input
+    let displayInput;
+    if (submissionResult !== null && lastSubmittedAnswer) {
+      displayInput = lastSubmittedAnswer.padEnd(targetWord.length, '');
+    } else {
+      displayInput = userAnswer.toUpperCase().padEnd(targetWord.length, '');
+    }
+    
+    // Determine if we should show submission feedback colors
+    const showSubmissionFeedback = submissionResult !== null && lastSubmittedAnswer;
+    const isLastSubmissionCorrect = submissionResult === 'correct';
+    
+    return targetWord.split('').map((letter, index) => {
+      const userLetter = displayInput[index] || '';
+      const hasUserInput = displayInput[index] && displayInput[index] !== ' ';
+      const isCurrentPosition = index === userAnswer.length && !showSubmissionFeedback;
+      
+      return {
+        targetLetter: letter,
+        userLetter: hasUserInput ? userLetter : '',
+        hasInput: hasUserInput,
+        isCurrentPosition: isCurrentPosition,
+        showSubmissionFeedback: showSubmissionFeedback,
+        isSubmissionCorrect: isLastSubmissionCorrect,
+        index: index
+      };
+    });
   };
 
   return (
@@ -137,38 +178,65 @@ const GameScreen = ({ navigation, route }) => {
           />
         </View>
         
-        {/* Word Underlines */}
+        {/* Interactive Word Display */}
         <View style={styles.wordContainer}>
-          <Text style={styles.underlines}>{currentQuestionData.underlines}</Text>
+          <View style={styles.interactiveWordContainer}>
+            {generateInteractiveWord().map((letterData, index) => (
+              <View key={index} style={[
+                styles.letterContainer,
+                letterData.isCurrentPosition && styles.currentLetterContainer
+              ]}>
+                <Text style={[
+                  styles.letterText,
+                  letterData.isCurrentPosition && styles.currentLetterText,
+                  letterData.showSubmissionFeedback && letterData.hasInput && 
+                    (letterData.isSubmissionCorrect ? styles.correctLetter : styles.incorrectLetter)
+                ]}>
+                  {letterData.userLetter || ' '}
+                </Text>
+                <View style={[
+                  styles.letterUnderline,
+                  letterData.isCurrentPosition && styles.currentUnderline,
+                  letterData.showSubmissionFeedback && letterData.hasInput && 
+                    (letterData.isSubmissionCorrect ? styles.correctUnderline : styles.incorrectUnderline)
+                ]} />
+              </View>
+            ))}
+          </View>
         </View>
         
         {/* Input Field */}
-        {!isAnswered || timeLeft > 0 ? (
+        {!showResult ? (
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.answerInput}
-              placeholder="Type your answer..."
+              placeholder={`Type your answer... (${currentQuestionData.word.length} letters)`}
+              placeholderTextColor={theme.placeholder}
               value={userAnswer}
               onChangeText={setUserAnswer}
               autoCapitalize="characters"
               autoCorrect={false}
-              editable={timeLeft > 0}
+              editable={timeLeft > 0 && !isAnswered}
+              maxLength={currentQuestionData.word.length}
             />
             
             <TouchableOpacity 
-              style={[styles.submitButton, timeLeft === 0 && styles.disabledButton]}
+              style={[styles.submitButton, (timeLeft === 0 || isAnswered) && styles.disabledButton]}
               onPress={handleSubmit}
-              disabled={timeLeft === 0}
+              disabled={timeLeft === 0 || isAnswered}
             >
               <Text style={styles.submitButtonText}>Submit</Text>
             </TouchableOpacity>
 
-            {/* Show feedback for wrong answers */}
-            {showFeedback && resultMessage && (
-              <View style={styles.feedbackContainer}>
+            {/* Show feedback messages */}
+            {(showFeedback || isAnswered) && resultMessage && (
+              <View style={[
+                styles.feedbackContainer,
+                isAnswered && !showFeedback && styles.correctFeedbackContainer
+              ]}>
                 <Text style={[
                   styles.feedbackText,
-                  styles.incorrectText
+                  resultMessage.includes('Correct') ? styles.correctText : styles.incorrectText
                 ]}>
                   {resultMessage}
                 </Text>
@@ -176,7 +244,7 @@ const GameScreen = ({ navigation, route }) => {
             )}
           </View>
         ) : (
-          /* Result Display for correct answers */
+          /* Result Display for correct answers - waiting state */
           <View style={styles.resultContainer}>
             <Text style={[
               styles.resultText,
@@ -205,6 +273,8 @@ const GameScreen = ({ navigation, route }) => {
               setShowResult(false);
               setResultMessage('');
               setShowFeedback(false);
+              setLastSubmittedAnswer('');
+              setSubmissionResult(null);
             } else {
               // Game finished, show standings
               navigation.navigate('Standings', { points: userPoints });
@@ -276,11 +346,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 30,
   },
-  underlines: {
-    fontSize: 24,
+  interactiveWordContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  letterContainer: {
+    alignItems: 'center',
+    marginHorizontal: 6,
+    marginVertical: 5,
+  },
+  currentLetterContainer: {
+    transform: [{ scale: 1.1 }],
+  },
+  letterText: {
+    fontSize: 28,
     fontWeight: 'bold',
     color: theme.textPrimary,
-    letterSpacing: 8,
+    minWidth: 30,
+    textAlign: 'center',
+    minHeight: 35,
+  },
+  currentLetterText: {
+    color: theme.primary,
+  },
+  correctLetter: {
+    color: theme.success,
+  },
+  incorrectLetter: {
+    color: theme.error,
+  },
+  letterUnderline: {
+    width: 30,
+    height: 3,
+    backgroundColor: theme.border,
+    marginTop: 2,
+    borderRadius: 1,
+  },
+  currentUnderline: {
+    backgroundColor: theme.primary,
+    height: 4,
+  },
+  correctUnderline: {
+    backgroundColor: theme.success,
+  },
+  incorrectUnderline: {
+    backgroundColor: theme.error,
   },
   inputContainer: {
     alignItems: 'center',
@@ -325,6 +436,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: theme.error,
+  },
+  correctFeedbackContainer: {
+    borderColor: theme.success,
+    backgroundColor: theme.surfaceElevated,
   },
   feedbackText: {
     fontSize: 16,
