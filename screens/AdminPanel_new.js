@@ -33,24 +33,59 @@ const AdminPanel = ({ navigation }) => {
   useEffect(() => {
     // Subscribe to buzzer responses for current question in Round 2
     if (selectedRound === 2 && gameState?.currentQuestion) {
+      console.log('[AdminPanel] Subscribing to buzzer responses for question:', gameState.currentQuestion);
+      console.log('[AdminPanel] GameState:', {
+        round2Active: gameState.round2Active,
+        round2BuzzerActive: gameState.round2BuzzerActive,
+        currentQuestion: gameState.currentQuestion
+      });
+      
       const unsubscribe = FirebaseService.subscribeToBuzzerResponses(
         gameState.currentQuestion,
         async (responses) => {
+          console.log('[AdminPanel] Received buzzer responses:', responses.length);
+          console.log('[AdminPanel] Raw responses:', JSON.stringify(responses, null, 2));
+          
+          if (responses.length === 0) {
+            console.log('[AdminPanel] No responses yet');
+            setBuzzerResponses([]);
+            return;
+          }
+          
           // Fetch user details for each response
-          const responsesWithDetails = await Promise.all(
-            responses.map(async (response) => {
-              const userResult = await FirebaseService.getUserProfile(response.userId);
-              return {
-                ...response,
-                teamName: userResult.success ? userResult.data.teamName : 'Unknown'
-              };
-            })
-          );
-          setBuzzerResponses(responsesWithDetails);
+          try {
+            const responsesWithDetails = await Promise.all(
+              responses.map(async (response) => {
+                try {
+                  const userResult = await FirebaseService.getUserProfile(response.userId);
+                  return {
+                    ...response,
+                    teamName: userResult.success ? userResult.data.teamName : 'Unknown Team'
+                  };
+                } catch (error) {
+                  console.error('[AdminPanel] Error fetching user profile for:', response.userId, error);
+                  return {
+                    ...response,
+                    teamName: 'Unknown Team'
+                  };
+                }
+              })
+            );
+            
+            console.log('[AdminPanel] Buzzer responses with team names:', responsesWithDetails.length);
+            setBuzzerResponses(responsesWithDetails);
+          } catch (error) {
+            console.error('[AdminPanel] Error processing buzzer responses:', error);
+            setBuzzerResponses([]);
+          }
         }
       );
-      return () => unsubscribe();
+      return () => {
+        console.log('[AdminPanel] Unsubscribing from buzzer responses');
+        unsubscribe();
+      };
     } else {
+      console.log('[AdminPanel] Clearing buzzer responses - selectedRound:', selectedRound, 'currentQuestion:', gameState?.currentQuestion);
       setBuzzerResponses([]);
     }
   }, [selectedRound, gameState?.currentQuestion]);
@@ -667,7 +702,16 @@ const AdminPanel = ({ navigation }) => {
                 <Text style={styles.buzzerInstructions}>
                   Click on a team to award points: +20 (Correct), +0 (Pass), -10 (Wrong)
                 </Text>
-                {buzzerResponses.map((response, index) => (
+                {buzzerResponses.length === 0 ? (
+                  <View style={styles.noResponsesContainer}>
+                    <Text style={styles.noResponsesText}>
+                      {gameState?.round2BuzzerActive 
+                        ? '⏳ Waiting for teams to buzz in...' 
+                        : '🔔 Activate buzzer to start receiving responses'}
+                    </Text>
+                  </View>
+                ) : (
+                  buzzerResponses.map((response, index) => (
                   <View key={response.id} style={styles.buzzerResponseRow}>
                     <View style={styles.buzzerResponseInfo}>
                       <Text style={styles.buzzerRank}>#{index + 1}</Text>
@@ -708,7 +752,8 @@ const AdminPanel = ({ navigation }) => {
                       </View>
                     )}
                   </View>
-                ))}
+                  ))
+                )}
               </View>
 
             {/* Qualified Participants */}
@@ -1034,6 +1079,18 @@ const styles = StyleSheet.create({
     color: theme.textSecondary,
     marginBottom: 15,
     fontStyle: 'italic',
+  },
+  noResponsesContainer: {
+    padding: 20,
+    borderRadius: 8,
+    backgroundColor: theme.surfaceElevated,
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  noResponsesText: {
+    ...typography.body,
+    color: theme.textSecondary,
+    textAlign: 'center',
   },
   buzzerResponseRow: {
     flexDirection: 'row',

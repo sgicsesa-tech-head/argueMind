@@ -1052,25 +1052,57 @@ export class FirebaseService {
 
   // Subscribe to buzzer responses for real-time updates
   static subscribeToBuzzerResponses(questionNumber, callback) {
-    const buzzerQuery = query(
-      collection(db, 'buzzerResponses'),
-      where('questionNumber', '==', questionNumber),
-      orderBy('responseTime', 'asc')
-    );
-    
-    return onSnapshot(buzzerQuery, 
-      (snapshot) => {
-        const responses = [];
-        snapshot.forEach((doc) => {
-          responses.push({ id: doc.id, ...doc.data() });
-        });
-        callback(responses);
-      },
-      (error) => {
-        console.log('Buzzer listener error:', error.message);
-        callback([]);
-      }
-    );
+    try {
+      const buzzerQuery = query(
+        collection(db, 'buzzerResponses'),
+        where('questionNumber', '==', questionNumber),
+        orderBy('responseTime', 'asc')
+      );
+      
+      return onSnapshot(buzzerQuery, 
+        (snapshot) => {
+          const responses = [];
+          snapshot.forEach((doc) => {
+            responses.push({ id: doc.id, ...doc.data() });
+          });
+          console.log('Firebase listener - received responses:', responses.length, 'for question:', questionNumber);
+          callback(responses);
+        },
+        (error) => {
+          console.error('Buzzer listener error:', error);
+          // If orderBy fails due to missing index, try without ordering
+          if (error.code === 'failed-precondition' || error.code === 'permission-denied') {
+            console.log('Retrying without orderBy...');
+            const simpleQuery = query(
+              collection(db, 'buzzerResponses'),
+              where('questionNumber', '==', questionNumber)
+            );
+            
+            return onSnapshot(simpleQuery,
+              (snapshot) => {
+                const responses = [];
+                snapshot.forEach((doc) => {
+                  responses.push({ id: doc.id, ...doc.data() });
+                });
+                // Sort manually
+                responses.sort((a, b) => a.responseTime - b.responseTime);
+                console.log('Firebase listener (fallback) - received responses:', responses.length);
+                callback(responses);
+              },
+              (err) => {
+                console.error('Fallback listener also failed:', err);
+                callback([]);
+              }
+            );
+          }
+          callback([]);
+        }
+      );
+    } catch (error) {
+      console.error('Error setting up buzzer subscription:', error);
+      callback([]);
+      return () => {}; // Return empty unsubscribe function
+    }
   }
 
   // Clear buzzer responses for current question only
