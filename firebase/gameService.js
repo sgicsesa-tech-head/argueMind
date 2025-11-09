@@ -22,8 +22,8 @@ import { db, auth } from './config';
 
 export class FirebaseService {
   
-  // Authentication Methods
-  static async registerUser(email, password, teamName) {
+  // Authentication Methods - Only login for predefined users
+  static async createPredefinedUser(email, password, teamName, isAdmin = false) {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -40,7 +40,7 @@ export class FirebaseService {
         round2Rank: null,
         finalRank: null,
         qualified: false,
-        isAdmin: false,
+        isAdmin: isAdmin,
         createdAt: serverTimestamp(),
         lastActive: serverTimestamp()
       });
@@ -56,14 +56,55 @@ export class FirebaseService {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      // Update last active
-      await updateDoc(doc(db, 'users', user.uid), {
-        lastActive: serverTimestamp()
-      });
+      // Check if user profile exists, create if it doesn't
+      const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        // Create user profile if it doesn't exist
+        const userData = {
+          uid: user.uid,
+          email: user.email,
+          teamName: user.email.split('@')[0] || 'Team', // Use email prefix as team name
+          round1Score: 0,
+          round2Score: 0,
+          totalScore: 0,
+          round1Rank: null,
+          round2Rank: null,
+          finalRank: null,
+          qualified: false,
+          isAdmin: false,
+          createdAt: serverTimestamp(),
+          lastActive: serverTimestamp()
+        };
+
+        await setDoc(userRef, userData);
+        console.log("User profile created for:", user.email);
+      } else {
+        // Update last active if profile exists
+        await updateDoc(userRef, { 
+          lastActive: serverTimestamp() 
+        });
+      }
 
       return { success: true, user };
     } catch (error) {
-      return { success: false, error: error.message };
+      console.error('Login error:', error);
+      
+      // Handle specific Firebase Auth errors
+      let errorMessage = "Invalid credentials. Please contact admin to get your login details.";
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = "No user found with this email. Please contact admin for credentials.";
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = "Incorrect password. Please try again or contact admin.";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "Invalid email format. Please check your email.";
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = "This account has been disabled. Please contact admin.";
+      }
+
+      return { success: false, error: errorMessage };
     }
   }
 

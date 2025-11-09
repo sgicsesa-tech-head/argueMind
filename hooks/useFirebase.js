@@ -1,76 +1,53 @@
 import { useState, useEffect } from 'react';
 import { FirebaseService } from '../firebase/gameService';
-import { DemoFirebaseService, shouldUseDemoMode } from '../utils/demoMode';
 
 // Authentication hook
 export const useAuth = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
-  const [isDemo, setIsDemo] = useState(false);
 
   useEffect(() => {
-    try {
-      const service = isDemo ? DemoFirebaseService : FirebaseService;
+    const unsubscribe = FirebaseService.onAuthStateChanged((firebaseUser) => {
+      console.log('Auth state changed:', firebaseUser ? 'user found' : 'no user');
+      setUser(firebaseUser);
+      setLoading(false);
       
-      const unsubscribe = service.onAuthStateChanged((firebaseUser) => {
-        console.log('Auth state changed:', firebaseUser ? 'user found' : 'no user');
-        setUser(firebaseUser);
-        setLoading(false);
+      if (firebaseUser) {
+        // Subscribe to user data from Firestore
+        const unsubscribeUser = FirebaseService.subscribeToUser(firebaseUser.uid, (data) => {
+          console.log('User data updated:', data);
+          setUserData(data);
+        });
         
-        if (firebaseUser) {
-          // Subscribe to user data from Firestore
-          const unsubscribeUser = service.subscribeToUser(firebaseUser.uid, (data) => {
-            console.log('User data updated:', data);
-            setUserData(data);
-          });
-          
-          return () => unsubscribeUser();
-        } else {
-          setUserData(null);
-        }
-      });
-
-      return () => unsubscribe();
-    } catch (error) {
-      console.log('Auth hook error:', error.message);
-      if (shouldUseDemoMode(error)) {
-        console.log('Switching to demo mode for auth');
-        setIsDemo(true);
+        return () => unsubscribeUser();
+      } else {
+        setUserData(null);
       }
-    }
-  }, [isDemo]);
+    });
 
-  return { user, userData, loading, isDemo };
+    return () => unsubscribe();
+  }, []);
+
+  return { user, userData, loading };
 };
 
 // Game state hook
 export const useGameState = () => {
   const [gameState, setGameState] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isDemo, setIsDemo] = useState(false);
 
   useEffect(() => {
-    try {
-      const service = isDemo ? DemoFirebaseService : FirebaseService;
-      
-      const unsubscribe = service.subscribeToGameState((data) => {
-        console.log('Game state updated:', data);
-        setGameState(data);
-        setLoading(false);
-      });
+    const unsubscribe = FirebaseService.subscribeToGameState((data) => {
+      console.log('Game state updated:', data);
+      setGameState(data);
+      setLoading(false);
+    });
 
-      return () => unsubscribe();
-    } catch (error) {
-      console.log('Game state hook error:', error.message);
-      if (shouldUseDemoMode(error)) {
-        console.log('Switching to demo mode for game state');
-        setIsDemo(true);
-      }
-    }
-  }, [isDemo]);
+    return () => unsubscribe();
+  }, []);
 
-  return { gameState, loading, isDemo };
+  return { gameState, loading };
 };
 
 // Leaderboard hook
@@ -119,16 +96,13 @@ export const useRound2 = () => {
 
 // Main Firebase hook (combines auth and game state)
 export const useFirebase = () => {
-  const { user, userData, loading: authLoading, isDemo: authDemo } = useAuth();
-  const { gameState, loading: gameLoading, isDemo: gameDemo } = useGameState();
-
-  const isDemo = authDemo || gameDemo;
+  const { user, userData, loading: authLoading } = useAuth();
+  const { gameState, loading: gameLoading } = useGameState();
 
   return {
     user,
     userData,
     gameState,
-    loading: authLoading || gameLoading,
-    isDemo
+    loading: authLoading || gameLoading
   };
 };

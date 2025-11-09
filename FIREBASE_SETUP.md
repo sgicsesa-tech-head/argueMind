@@ -66,19 +66,46 @@ The app will automatically create these collections:
 - `points` (number): Points awarded
 - `timestamp` (timestamp): When buzzer was pressed
 
-## Admin Account
+## Predefined Accounts
+
+### Admin Account
 - Email: `admin@csesa`
 - Password: `arguemind`
+- This bypasses Firebase auth and goes directly to admin panel
 
-This bypasses Firebase auth and goes directly to admin panel.
+### Predefined Users (Create these in Firebase Console)
+You need to manually create these users in Firebase Authentication:
+
+1. **Team Alpha**
+   - Email: `team1@arguemind.com`
+   - Password: `team1pass`
+
+2. **Team Beta**
+   - Email: `team2@arguemind.com` 
+   - Password: `team2pass`
+
+3. **Team Gamma**
+   - Email: `team3@arguemind.com`
+   - Password: `team3pass`
+
+4. **Team Delta**
+   - Email: `team4@arguemind.com`
+   - Password: `team4pass`
+
+5. **Team Epsilon**
+   - Email: `team5@arguemind.com`
+   - Password: `team5pass`
+
+*Add more teams as needed for your competition*
 
 ## Features Implemented
 
 ### Authentication
-- ✅ Firebase email/password authentication with persistence
-- ✅ User registration with team names
+- ✅ Firebase email/password authentication with persistence for predefined users
+- ✅ No user registration - all users are predefined
 - ✅ Admin bypass login
 - ✅ Auto-login persistence across sessions
+- ✅ All features are free for all users
 
 ### Game State Management
 - ✅ Real-time game state updates via Firebase
@@ -115,13 +142,20 @@ This bypasses Firebase auth and goes directly to admin panel.
 ## Usage Flow
 
 1. **Setup**: Admin creates Firebase project and updates config
-2. **User Registration**: Users sign up with email/password and team name
-3. **Round 1**: Admin starts Round 1, users see word guessing game
-4. **Question Control**: Admin clicks "Next Question" to move all users to next question
-5. **Qualification**: Top 10 users automatically qualify for Round 2
-6. **Round 2**: Admin starts Round 2, qualified users can participate
-7. **Buzzer System**: Admin controls questions and buzzer activation
-8. **Final Results**: Standings show combined scores and rankings
+2. **Predefined Users**: Admin creates all team users using `utils/setupUsers.js`
+3. **User Login**: Users login with predefined credentials provided by admin
+4. **Round 1**: Admin starts Round 1, users see word guessing game
+5. **Question Control**: Admin clicks "Next Question" to move all users to next question
+6. **Qualification**: Top 10 users automatically qualify for Round 2
+7. **Round 2**: Admin starts Round 2, qualified users can participate
+8. **Buzzer System**: Admin controls questions and buzzer activation
+9. **Final Results**: Standings show combined scores and rankings
+
+## Important Notes
+
+- **No Signup/Registration**: All users are predefined, no new user registration allowed
+- **Free for All**: All features are available to all users, no premium/subscription features
+- **Predefined Users Only**: Users can only login with credentials created by admin
 
 ## Security Notes
 

@@ -345,7 +345,7 @@ const GameScreen = ({ navigation, route }) => {
         )}
       </View>
       
-      {/* Admin Controls (temporary - will be separate admin panel) */}
+      {/* Admin Controls */}
       <View style={styles.adminControls}>
         <TouchableOpacity 
           style={styles.adminButton}

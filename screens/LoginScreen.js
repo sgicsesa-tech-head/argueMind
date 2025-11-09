@@ -17,8 +17,6 @@ const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [teamName, setTeamName] = useState("");
 
   const handleLogin = async () => {
     // Admin login (unchanged)
@@ -26,42 +24,22 @@ const LoginScreen = ({ navigation }) => {
       navigation.navigate("Admin");
       return;
     }
-    else{
-
-    // Firebase authentication for participants
+    else {
+    // Firebase authentication for predefined users only
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-
-    if (isSignUp && !teamName.trim()) {
-      Alert.alert('Error', 'Please enter your team name');
       return;
     }
 
     setLoading(true);
 
     try {
-      let result;
-      
-      if (isSignUp) {
-        // Register new user
-        result = await FirebaseService.registerUser(email, password, teamName);
-        if (result.success) {
-          Alert.alert('Success', 'Account created successfully!', [
-            { text: 'OK', onPress: () => navigation.navigate("Dashboard") }
-          ]);
-        }
+      // Login existing user
+      const result = await FirebaseService.loginUser(email, password);
+      if (result.success) {
+        navigation.navigate("Dashboard");
       } else {
-        // Login existing user
-        result = await FirebaseService.loginUser(email, password);
-        if (result.success) {
-          navigation.navigate("Dashboard");
-        }
-      }
-
-      if (!result.success) {
-        Alert.alert('Authentication Failed', result.error);
+        Alert.alert('Authentication Failed', result.error || 'Invalid credentials. Please contact admin to get your login details.');
       }
     } catch (error) {
       Alert.alert('Error', 'Something went wrong. Please try again.');
@@ -79,7 +57,7 @@ const LoginScreen = ({ navigation }) => {
       >
         <View style={styles.loginContainer}>
           <Text style={styles.title}>Welcome to ArgueMind</Text>
-          <Text style={styles.subtitle}>Please sign in to continue</Text>
+          <Text style={styles.subtitle}>Sign in with your provided credentials</Text>
 
           <View style={styles.inputContainer}>
             <TextInput
@@ -93,16 +71,7 @@ const LoginScreen = ({ navigation }) => {
               autoCorrect={false}
             />
 
-            {isSignUp && (
-              <TextInput
-                style={styles.input}
-                placeholder="Team Name"
-                placeholderTextColor={theme.placeholder}
-                value={teamName}
-                onChangeText={setTeamName}
-                autoCapitalize="words"
-              />
-            )}
+
 
             <TextInput
               style={styles.input}
@@ -120,19 +89,15 @@ const LoginScreen = ({ navigation }) => {
               disabled={loading}
             >
               <Text style={styles.loginButtonText}>
-                {loading ? (isSignUp ? "Creating Account..." : "Signing In...") : (isSignUp ? "Create Account" : "Sign In")}
+                {loading ? "Signing In..." : "Sign In"}
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.toggleButton}
-              onPress={() => setIsSignUp(!isSignUp)}
-              disabled={loading}
-            >
-              <Text style={styles.toggleButtonText}>
-                {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
+            <View style={styles.infoContainer}>
+              <Text style={styles.infoText}>
+                Contact admin for login credentials
               </Text>
-            </TouchableOpacity>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -195,14 +160,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
   },
-  toggleButton: {
+  infoContainer: {
     marginTop: 20,
     alignItems: "center",
   },
-  toggleButtonText: {
-    color: theme.primary,
-    fontSize: 16,
-    fontWeight: "500",
+  infoText: {
+    color: theme.textSecondary,
+    fontSize: 14,
+    fontStyle: "italic",
   },
 });
 
