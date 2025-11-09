@@ -1028,4 +1028,67 @@ export class FirebaseService {
     }
   }
 
+  // Get buzzer responses for current question
+  static async getBuzzerResponses(questionNumber) {
+    try {
+      const buzzerQuery = query(
+        collection(db, 'buzzerResponses'),
+        where('questionNumber', '==', questionNumber),
+        orderBy('responseTime', 'asc')
+      );
+      
+      const buzzerSnapshot = await getDocs(buzzerQuery);
+      const responses = [];
+      
+      buzzerSnapshot.forEach((doc) => {
+        responses.push({ id: doc.id, ...doc.data() });
+      });
+      
+      return { success: true, responses };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Subscribe to buzzer responses for real-time updates
+  static subscribeToBuzzerResponses(questionNumber, callback) {
+    const buzzerQuery = query(
+      collection(db, 'buzzerResponses'),
+      where('questionNumber', '==', questionNumber),
+      orderBy('responseTime', 'asc')
+    );
+    
+    return onSnapshot(buzzerQuery, 
+      (snapshot) => {
+        const responses = [];
+        snapshot.forEach((doc) => {
+          responses.push({ id: doc.id, ...doc.data() });
+        });
+        callback(responses);
+      },
+      (error) => {
+        console.log('Buzzer listener error:', error.message);
+        callback([]);
+      }
+    );
+  }
+
+  // Clear buzzer responses for current question only
+  static async clearCurrentQuestionBuzzer(questionNumber) {
+    try {
+      const buzzerQuery = query(
+        collection(db, 'buzzerResponses'),
+        where('questionNumber', '==', questionNumber)
+      );
+      
+      const buzzerSnapshot = await getDocs(buzzerQuery);
+      const deletePromises = buzzerSnapshot.docs.map(docRef => deleteDoc(docRef.ref));
+      await Promise.all(deletePromises);
+      
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
 }

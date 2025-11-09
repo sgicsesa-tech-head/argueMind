@@ -9,7 +9,7 @@ import LoginScreen from './screens/LoginScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import GameScreen from './screens/GameScreen';
 import StandingsScreen from './screens/StandingsScreen';
-import AdminPanel from './screens/AdminPanel';
+import AdminPanel from './screens/AdminPanel_new';
 import Round2GameScreen from './screens/Round2GameScreen';
 import FinalStandingsScreen from './screens/FinalStandingsScreen';
 
