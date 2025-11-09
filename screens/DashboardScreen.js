@@ -39,11 +39,17 @@ const DashboardScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.content}>
-        <TouchableOpacity style={styles.roundButton}>
+        <TouchableOpacity 
+          style={styles.roundButton}
+          onPress={() => navigation.navigate('Game', { roundNumber: 1 })}
+        >
           <Text style={styles.roundButtonText}>Round 1</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.roundButton}>
+        <TouchableOpacity 
+          style={styles.roundButton}
+          onPress={() => navigation.navigate('Game', { roundNumber: 2 })}
+        >
           <Text style={styles.roundButtonText}>Round 2</Text>
         </TouchableOpacity>
       </View>
