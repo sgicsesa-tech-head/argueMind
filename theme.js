@@ -1,8 +1,8 @@
 // Theme configuration for ArgeMind app
 export const theme = {
   // Primary background colors
-  background: '#0f1419', // Very dark blue-grey
-  surface: '#1e2832', // Slightly lighter blue-grey for cards
+  background: '#1A1A2E', // Very dark blue-grey
+  surface: '#241A2E', // Slightly lighter blue-grey for cards
   surfaceElevated: '#273849', // Even lighter for elevated elements
   
   // Primary brand colors

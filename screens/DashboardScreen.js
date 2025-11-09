@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme, shadows, typography } from '../theme';
@@ -33,12 +34,16 @@ const DashboardScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.welcomeText}>Welcome to Argue Mind</Text>
+            <Text style={styles.welcomeText}>Team Name</Text>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
 
+      <View style={styles.intro}>
+        <Image style={styles.logo} source={require('../assets/csesa.png')} />
+        <Text style={styles.welcomeText}>Welcome to Argue Mind</Text>
+      </View>
       <View style={styles.content}>
         <TouchableOpacity 
           style={styles.roundButton}
@@ -76,6 +81,11 @@ const styles = StyleSheet.create({
   welcomeText: {
     ...typography.h2,
   },
+  logo: {
+    marginBottom: 10,
+    width: 250,
+    height: 250,
+  },
   logoutButton: {
     backgroundColor: theme.error,
     paddingHorizontal: 15,
@@ -87,6 +97,11 @@ const styles = StyleSheet.create({
     color: theme.textPrimary,
     fontSize: 14,
     fontWeight: '600',
+  },
+  intro: {
+    alignItems: 'center',
+    marginTop: 50,
+    marginBottom: -25,
   },
   content: {
     flex: 1,
