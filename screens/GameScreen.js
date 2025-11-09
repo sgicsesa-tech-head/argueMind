@@ -26,6 +26,7 @@ const GameScreen = ({ navigation, route }) => {
   const [userPoints, setUserPoints] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [resultMessage, setResultMessage] = useState('');
+  const [showFeedback, setShowFeedback] = useState(false);
   
   // Sample questions data (you'll replace this with your actual data)
   const questions = [
@@ -69,8 +70,6 @@ const GameScreen = ({ navigation, route }) => {
       return;
     }
     
-    setIsAnswered(true);
-    
     // Check answer (case insensitive)
     const isCorrect = userAnswer.toUpperCase() === currentQuestionData.word.toUpperCase();
     
@@ -83,10 +82,19 @@ const GameScreen = ({ navigation, route }) => {
       
       setUserPoints(userPoints + earnedPoints);
       setResultMessage(`Correct! +${earnedPoints} points`);
+      setIsAnswered(true);
       setShowResult(true);
     } else {
-      setResultMessage('Incorrect answer!');
-      setShowResult(true);
+      // For wrong answers, show feedback but keep input field active
+      setResultMessage('❌ Incorrect answer! Try again.');
+      setShowFeedback(true);
+      setUserAnswer(''); // Clear the input for next attempt
+      
+      // Show feedback briefly then clear it
+      setTimeout(() => {
+        setResultMessage('');
+        setShowFeedback(false);
+      }, 2000);
     }
   };
   
@@ -135,7 +143,7 @@ const GameScreen = ({ navigation, route }) => {
         </View>
         
         {/* Input Field */}
-        {!isAnswered && !showResult ? (
+        {!isAnswered || timeLeft > 0 ? (
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.answerInput}
@@ -154,9 +162,21 @@ const GameScreen = ({ navigation, route }) => {
             >
               <Text style={styles.submitButtonText}>Submit</Text>
             </TouchableOpacity>
+
+            {/* Show feedback for wrong answers */}
+            {showFeedback && resultMessage && (
+              <View style={styles.feedbackContainer}>
+                <Text style={[
+                  styles.feedbackText,
+                  styles.incorrectText
+                ]}>
+                  {resultMessage}
+                </Text>
+              </View>
+            )}
           </View>
         ) : (
-          /* Result Display */
+          /* Result Display for correct answers */
           <View style={styles.resultContainer}>
             <Text style={[
               styles.resultText,
@@ -184,6 +204,7 @@ const GameScreen = ({ navigation, route }) => {
               setIsAnswered(false);
               setShowResult(false);
               setResultMessage('');
+              setShowFeedback(false);
             } else {
               // Game finished, show standings
               navigation.navigate('Standings', { points: userPoints });
@@ -294,6 +315,21 @@ const styles = StyleSheet.create({
     color: theme.textPrimary,
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  feedbackContainer: {
+    marginTop: 15,
+    alignItems: 'center',
+    backgroundColor: theme.surfaceElevated,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.error,
+  },
+  feedbackText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   resultContainer: {
     alignItems: 'center',
