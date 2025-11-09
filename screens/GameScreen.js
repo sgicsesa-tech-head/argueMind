@@ -29,6 +29,7 @@ const GameScreen = ({ navigation, route }) => {
   const [showFeedback, setShowFeedback] = useState(false);
   const [lastSubmittedAnswer, setLastSubmittedAnswer] = useState('');
   const [submissionResult, setSubmissionResult] = useState(null); // 'correct', 'incorrect', or null
+  const [roundActive, setRoundActive] = useState(true); // Controlled by admin
   
   // Sample questions data (you'll replace this with your actual data)
   const questions = [
@@ -47,21 +48,21 @@ const GameScreen = ({ navigation, route }) => {
   
   const currentQuestionData = questions[currentQuestion - 1] || questions[0];
   
-  // Timer effect
+  // Timer effect - runs universally for all users regardless of answer status
   useEffect(() => {
-    if (timeLeft > 0 && !isAnswered && !showResult) {
+    if (timeLeft > 0) {
       const timer = setTimeout(() => {
         setTimeLeft(timeLeft - 1);
       }, 1000);
       return () => clearTimeout(timer);
-    } else if (timeLeft === 0 && !isAnswered) {
+    } else if (timeLeft === 0) {
       handleTimeUp();
     }
-  }, [timeLeft, isAnswered, showResult]);
+  }, [timeLeft]);
   
   const handleTimeUp = () => {
-    Alert.alert('Time Up!', 'Moving to next question...');
-    // Handle time up logic here
+    // Handle time up logic here - no popup
+    // Can add other logic like auto-moving to next question if needed
   };
   
   const handleSubmit = () => {
@@ -157,9 +158,14 @@ const GameScreen = ({ navigation, route }) => {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Round {roundNumber}</Text>
         <Text style={styles.questionCounter}>Question {currentQuestion}/{QUESTIONS_TOTAL}</Text>
-        <Text style={[styles.timer, { color: getTimerColor() }]}>
-          {formatTime(timeLeft)}
-        </Text>
+        <View style={styles.timerContainer}>
+          <Text style={[styles.timer, { color: getTimerColor() }]}>
+            {formatTime(timeLeft)}
+          </Text>
+          {isAnswered && timeLeft > 0 && (
+            <Text style={styles.timerSubtext}>Next question in</Text>
+          )}
+        </View>
       </View>
       
       {/* Points Display */}
@@ -264,17 +270,18 @@ const GameScreen = ({ navigation, route }) => {
         <TouchableOpacity 
           style={styles.adminButton}
           onPress={() => {
-            // Simulate admin clicking next question
+            // Simulate admin clicking next question - timer resets for all users
             if (currentQuestion < QUESTIONS_TOTAL) {
               setCurrentQuestion(currentQuestion + 1);
               setUserAnswer('');
-              setTimeLeft(TIMER_DURATION);
+              setTimeLeft(TIMER_DURATION); // Reset timer for all users
               setIsAnswered(false);
               setShowResult(false);
               setResultMessage('');
               setShowFeedback(false);
               setLastSubmittedAnswer('');
               setSubmissionResult(null);
+              setRoundActive(true); // Reactivate round
             } else {
               // Game finished, show standings
               navigation.navigate('Standings', { points: userPoints });
@@ -285,6 +292,12 @@ const GameScreen = ({ navigation, route }) => {
             {currentQuestion < QUESTIONS_TOTAL ? 'Next Question (Admin)' : 'View Standings'}
           </Text>
         </TouchableOpacity>
+        
+        <View style={styles.adminInfo}>
+          <Text style={styles.adminInfoText}>
+            Timer runs universally for all players • Controlled by admin
+          </Text>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -311,10 +324,18 @@ const styles = StyleSheet.create({
   questionCounter: {
     ...typography.caption,
   },
+  timerContainer: {
+    alignItems: 'center',
+  },
   timer: {
     fontSize: 18,
     fontWeight: 'bold',
     color: theme.textPrimary,
+  },
+  timerSubtext: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginTop: 2,
   },
   pointsContainer: {
     backgroundColor: theme.primary,
@@ -483,6 +504,16 @@ const styles = StyleSheet.create({
     color: theme.textPrimary,
     fontSize: 16,
     fontWeight: '600',
+  },
+  adminInfo: {
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  adminInfoText: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 
