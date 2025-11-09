@@ -46,10 +46,10 @@ const StandingsScreen = ({ navigation, route }) => {
         }
 
         // Add rank to each user
-        const rankedUsers = sortedUsers.map((user, index) => ({
-          ...user,
+        const rankedUsers = sortedUsers.map((userData, index) => ({
+          ...userData,
           rank: index + 1,
-          isCurrentUser: user.uid === user?.uid
+          isCurrentUser: userData.uid === user?.uid
         }));
 
         setStandings(rankedUsers);

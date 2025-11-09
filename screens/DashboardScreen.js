@@ -159,6 +159,16 @@ const DashboardScreen = ({ navigation }) => {
               {gameState?.round1Active ? 'Active - Tap to join' : 'Waiting for admin to start'}
             </Text>
           </TouchableOpacity>
+
+          {/* View Round 1 Standings Button - Only show when round 1 is complete */}
+          {!gameState?.round1Active && gameState?.currentRound >= 2 && (
+            <TouchableOpacity 
+              style={styles.standingsButton}
+              onPress={() => navigation.navigate('Standings', { round: 1, isAdmin: false })}
+            >
+              <Text style={styles.standingsButtonText}>📊 View Round 1 Standings</Text>
+            </TouchableOpacity>
+          )}
           
           <TouchableOpacity 
             style={[
@@ -182,6 +192,26 @@ const DashboardScreen = ({ navigation }) => {
                gameState?.round2Active ? 'Active - Tap to join' : 'Waiting for admin to start'}
             </Text>
           </TouchableOpacity>
+
+          {/* Show Eliminated Message for users who didn't qualify */}
+          {!userProfile?.qualified && !gameState?.round1Active && gameState?.currentRound >= 2 && (
+            <View style={styles.eliminatedContainer}>
+              <Text style={styles.eliminatedText}>❌ Not Qualified for Round 2</Text>
+              <Text style={styles.eliminatedSubtext}>
+                Only top 10-15 teams from Round 1 advance to Round 2
+              </Text>
+            </View>
+          )}
+
+          {/* View Round 2 Standings Button - Only show when round 2 is complete */}
+          {!gameState?.round2Active && gameState?.gameEnded && userProfile?.qualified && (
+            <TouchableOpacity 
+              style={styles.standingsButton}
+              onPress={() => navigation.navigate('Standings', { round: 2, isAdmin: false })}
+            >
+              <Text style={styles.standingsButtonText}>📊 View Round 2 Standings</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -316,6 +346,26 @@ const styles = StyleSheet.create({
   },
   disabledButtonText: {
     color: theme.textMuted,
+  },
+  eliminatedContainer: {
+    backgroundColor: theme.error + '30',
+    borderRadius: 12,
+    padding: 20,
+    marginVertical: 10,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.error,
+  },
+  eliminatedText: {
+    color: theme.error,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  eliminatedSubtext: {
+    color: theme.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
   },
   standingsButton: {
     backgroundColor: theme.surface,

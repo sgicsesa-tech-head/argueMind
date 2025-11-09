@@ -621,11 +621,16 @@ export class FirebaseService {
         users.push({ id: doc.id, ...doc.data() });
       });
 
+      // Get qualified count from game state
+      const gameStateDoc = await getDoc(doc(db, 'gameState', 'current'));
+      const qualifiedCount = gameStateDoc.exists() ? 
+        Math.min(gameStateDoc.data().qualifiedCount || 10, 15) : 10;
+
       // Update rankings and qualify top players
       for (let i = 0; i < users.length; i++) {
         const user = users[i];
         const rank = i + 1;
-        const qualified = rank <= 10; // Top 10 qualify for round 2
+        const qualified = rank <= qualifiedCount; // Top N qualify for round 2
 
         await updateDoc(doc(db, 'users', user.id), {
           round1Rank: rank,
@@ -634,7 +639,7 @@ export class FirebaseService {
         });
       }
 
-      return { success: true, qualifiedUsers: users.slice(0, 10) };
+      return { success: true, qualifiedUsers: users.slice(0, qualifiedCount) };
     } catch (error) {
       return { success: false, error: error.message };
     }

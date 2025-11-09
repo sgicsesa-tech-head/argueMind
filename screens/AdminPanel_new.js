@@ -36,11 +36,14 @@ const AdminPanel = ({ navigation }) => {
         const allParticipants = result.users.filter(user => !user.isAdmin);
         setParticipants(allParticipants);
         
-        // Get qualified participants for Round 2 (top 10 from Round 1)
+        // Get qualified count from gameState (default to 10, max 15)
+        const qualifiedCount = Math.min(gameState?.qualifiedCount || 10, 15);
+        
+        // Get qualified participants for Round 2 (top N from Round 1)
         const qualified = allParticipants
           .filter(user => user.round1Score > 0)
           .sort((a, b) => b.round1Score - a.round1Score)
-          .slice(0, 10);
+          .slice(0, qualifiedCount);
         
         setQualifiedParticipants(qualified);
         
@@ -425,6 +428,16 @@ const AdminPanel = ({ navigation }) => {
                   </>
                 )}
               </View>
+
+              {/* View Standings Button for Round 1 */}
+              <View style={styles.buttonRow}>
+                <TouchableOpacity 
+                  style={styles.standingsButton}
+                  onPress={() => navigation.navigate('Standings', { round: 1, isAdmin: true })}
+                >
+                  <Text style={styles.standingsButtonText}>📊 View Round 1 Standings</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Timer Controls */}
@@ -594,6 +607,16 @@ const AdminPanel = ({ navigation }) => {
                   </TouchableOpacity>
                 </View>
               )}
+
+              {/* View Standings Button for Round 2 */}
+              <View style={styles.buttonRow}>
+                <TouchableOpacity 
+                  style={styles.standingsButton}
+                  onPress={() => navigation.navigate('Standings', { round: 2, isAdmin: true })}
+                >
+                  <Text style={styles.standingsButtonText}>📊 View Round 2 Standings</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Qualified Participants */}
@@ -897,6 +920,22 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
     backgroundColor: theme.textMuted,
+  },
+  standingsButton: {
+    flex: 1,
+    backgroundColor: theme.accent,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 10,
+    borderWidth: 2,
+    borderColor: theme.primary,
+    ...shadows.medium,
+  },
+  standingsButtonText: {
+    color: theme.textPrimary,
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
 
