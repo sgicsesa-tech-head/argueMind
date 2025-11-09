@@ -7,21 +7,19 @@ import {
   StyleSheet,
   Alert,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme, shadows, typography } from '../theme';
+import { FirebaseService } from '../firebase/gameService';
+import { useFirebase } from '../hooks/useFirebase';
 
 const GameScreen = ({ navigation, route }) => {
   const { roundNumber } = route.params || { roundNumber: 1 };
-  
-  // Game configuration
-  const TIMER_DURATION = 90; // seconds - make this editable
-  const QUESTIONS_TOTAL = 20; // 15-25 questions
+  const { user, gameState, loading: firebaseLoading } = useFirebase();
   
   // Game state
-  const [currentQuestion, setCurrentQuestion] = useState(1);
   const [userAnswer, setUserAnswer] = useState('');
-  const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
   const [isAnswered, setIsAnswered] = useState(false);
   const [userPoints, setUserPoints] = useState(0);
   const [showResult, setShowResult] = useState(false);
@@ -29,7 +27,8 @@ const GameScreen = ({ navigation, route }) => {
   const [showFeedback, setShowFeedback] = useState(false);
   const [lastSubmittedAnswer, setLastSubmittedAnswer] = useState('');
   const [submissionResult, setSubmissionResult] = useState(null); // 'correct', 'incorrect', or null
-  const [roundActive, setRoundActive] = useState(true); // Controlled by admin
+  const [userProfile, setUserProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
   
   // Sample questions data (you'll replace this with your actual data)
   const questions = [
@@ -43,67 +42,117 @@ const GameScreen = ({ navigation, route }) => {
       word: 'BUTTERFLY',
       imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Butterfly+Image',
     },
-    // Add more questions...
+    {
+      id: 3,
+      word: 'COMPUTER',
+      imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Computer+Image',
+    },
+    {
+      id: 4,
+      word: 'RAINBOW',
+      imageUrl: 'https://via.placeholder.com/300x200/cccccc/000000?text=Rainbow+Image',
+    },
+    // Add more questions up to 20...
   ];
   
-  const currentQuestionData = questions[currentQuestion - 1] || questions[0];
-  
-  // Timer effect - runs universally for all users regardless of answer status
+  // Load user profile and set up real-time listeners
   useEffect(() => {
-    if (timeLeft > 0) {
-      const timer = setTimeout(() => {
-        setTimeLeft(timeLeft - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else if (timeLeft === 0) {
-      handleTimeUp();
+    if (user) {
+      loadUserProfile();
     }
-  }, [timeLeft]);
-  
-  const handleTimeUp = () => {
-    // Handle time up logic here - no popup
-    // Can add other logic like auto-moving to next question if needed
+  }, [user]);
+
+  // Listen to game state changes for question updates
+  useEffect(() => {
+    if (gameState) {
+      // Reset answer state when question changes
+      if (gameState.currentQuestion !== userProfile?.lastAnsweredQuestion) {
+        setUserAnswer('');
+        setIsAnswered(false);
+        setShowFeedback(false);
+        setSubmissionResult(null);
+        setLastSubmittedAnswer('');
+      }
+    }
+  }, [gameState?.currentQuestion]);
+
+  const loadUserProfile = async () => {
+    try {
+      const profile = await FirebaseService.getUserProfile(user.uid);
+      if (profile.success) {
+        setUserProfile(profile.data);
+        setUserPoints(profile.data.round1Score || 0);
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    } finally {
+      setLoading(false);
+    }
   };
   
-  const handleSubmit = () => {
+  const getCurrentQuestionData = () => {
+    const questionIndex = (gameState?.currentQuestion || 1) - 1;
+    return questions[questionIndex] || questions[0];
+  };
+  
+  const handleSubmit = async () => {
     if (!userAnswer.trim()) {
       Alert.alert('Error', 'Please enter an answer');
       return;
     }
     
-    // Store the submitted answer and check if correct
+    const currentQuestionData = getCurrentQuestionData();
     const isCorrect = userAnswer.toUpperCase() === currentQuestionData.word.toUpperCase();
+    
     setLastSubmittedAnswer(userAnswer.toUpperCase());
     setSubmissionResult(isCorrect ? 'correct' : 'incorrect');
     
-    if (isCorrect) {
-      // Calculate points based on time and rank (simplified for now)
-      const timeTaken = TIMER_DURATION - timeLeft;
-      const basePoints = 200;
-      const timeBonus = Math.max(0, Math.floor((timeLeft / TIMER_DURATION) * 50));
-      const earnedPoints = basePoints + timeBonus;
+    try {
+      // Submit answer to Firebase
+      const result = await FirebaseService.submitAnswer(
+        user.uid,
+        gameState?.currentQuestion || 1,
+        userAnswer,
+        roundNumber
+      );
       
-      setUserPoints(userPoints + earnedPoints);
-      setResultMessage(`✅ Correct! +${earnedPoints} points`);
-      setIsAnswered(true);
-      
-      // Show correct feedback for 2 seconds, then show waiting message
-      setTimeout(() => {
-        setShowResult(true);
-      }, 2000);
-    } else {
-      // For wrong answers, show feedback but keep input field active
-      setResultMessage('❌ Incorrect answer! Try again.');
-      setShowFeedback(true);
-      setUserAnswer(''); // Clear the input for next attempt
-      
-      // Show feedback briefly then clear submission result
-      setTimeout(() => {
-        setResultMessage('');
-        setShowFeedback(false);
-        setSubmissionResult(null);
-        setLastSubmittedAnswer('');
-      }, 2000);
+      if (result.success && isCorrect) {
+        const earnedPoints = result.points || 100;
+        setUserPoints(userPoints + earnedPoints);
+        setResultMessage(`✅ Correct! +${earnedPoints} points`);
+        setIsAnswered(true);
+        
+        // Update local user profile
+        if (userProfile) {
+          const updatedProfile = {
+            ...userProfile,
+            round1Score: (userProfile.round1Score || 0) + earnedPoints,
+            lastAnsweredQuestion: gameState?.currentQuestion || 1
+          };
+          setUserProfile(updatedProfile);
+        }
+        
+        // Show correct feedback for 2 seconds, then show waiting message
+        setTimeout(() => {
+          setResultMessage('Waiting for admin to move to next question...');
+          setShowFeedback(true);
+        }, 2000);
+      } else {
+        setResultMessage(`❌ Incorrect! Try again.`);
+        setShowFeedback(true);
+        setUserAnswer(''); // Clear for retry
+        
+        // Clear feedback after 2 seconds
+        setTimeout(() => {
+          setResultMessage('');
+          setShowFeedback(false);
+          setSubmissionResult(null);
+          setLastSubmittedAnswer('');
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Error submitting answer:', error);
+      Alert.alert('Error', 'Failed to submit answer. Please try again.');
     }
   };
   
@@ -152,20 +201,51 @@ const GameScreen = ({ navigation, route }) => {
     });
   };
 
+  // Check if user can access the round
+  if (loading || firebaseLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={styles.loadingText}>Loading game...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!gameState?.round1Active) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.waitingContainer}>
+          <Text style={styles.waitingTitle}>Round 1 Not Active</Text>
+          <Text style={styles.waitingText}>Please wait for the admin to start Round 1</Text>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.navigate('Dashboard')}
+          >
+            <Text style={styles.backButtonText}>Back to Dashboard</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const currentQuestionData = getCurrentQuestionData();
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Round {roundNumber}</Text>
-        <Text style={styles.questionCounter}>Question {currentQuestion}/{QUESTIONS_TOTAL}</Text>
-        <View style={styles.timerContainer}>
-          <Text style={[styles.timer, { color: getTimerColor() }]}>
-            {formatTime(timeLeft)}
-          </Text>
-          {isAnswered && timeLeft > 0 && (
-            <Text style={styles.timerSubtext}>Next question in</Text>
-          )}
-        </View>
+        <Text style={styles.questionCounter}>
+          Question {gameState?.currentQuestion || 1}/{gameState?.round1TotalQuestions || 20}
+        </Text>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.navigate('Dashboard')}
+        >
+          <Text style={styles.backButtonText}>Dashboard</Text>
+        </TouchableOpacity>
       </View>
       
       {/* Points Display */}
@@ -307,6 +387,44 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: theme.textSecondary,
+    marginTop: 10,
+    fontSize: 16,
+  },
+  waitingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  waitingTitle: {
+    ...typography.h2,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  waitingText: {
+    ...typography.body,
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  backButton: {
+    backgroundColor: theme.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    ...shadows.medium,
+  },
+  backButtonText: {
+    color: theme.textPrimary,
+    fontWeight: '600',
+    fontSize: 16,
   },
   header: {
     backgroundColor: theme.surface,

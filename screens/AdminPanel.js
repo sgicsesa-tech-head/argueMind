@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,60 +6,86 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme, shadows, typography } from '../theme';
+import { FirebaseService } from '../firebase/gameService';
+import { useFirebase } from '../hooks/useFirebase';
 
 const AdminPanel = ({ navigation }) => {
+  const { gameState, loading: firebaseLoading } = useFirebase();
   const [selectedRound, setSelectedRound] = useState(1);
-  
-  // Round 1 State
-  const [round1Question, setRound1Question] = useState(1);
-  const [round1Active, setRound1Active] = useState(false);
-  const [round1Participants, setRound1Participants] = useState([
-    { id: 1, name: 'Player 1', status: 'waiting', points: 0, answered: false },
-    { id: 2, name: 'Player 2', status: 'answering', points: 180, answered: false },
-    { id: 3, name: 'Player 3', status: 'completed', points: 200, answered: true },
-    { id: 4, name: 'Player 4', status: 'waiting', points: 0, answered: false },
-    { id: 5, name: 'Player 5', status: 'waiting', points: 150, answered: true },
-    { id: 6, name: 'Player 6', status: 'answering', points: 120, answered: false },
-  ]);
-
-  // Round 2 State
-  const [round2Question, setRound2Question] = useState(1);
-  const [round2QuestionActive, setRound2QuestionActive] = useState(false);
-  const [buzzerActive, setBuzzerActive] = useState(false);
+  const [participants, setParticipants] = useState([]);
+  const [qualifiedParticipants, setQualifiedParticipants] = useState([]);
   const [buzzerRankings, setBuzzerRankings] = useState([]);
-  const [qualifiedParticipants, setQualifiedParticipants] = useState([
-    { id: 1, name: 'Player 1', round1Score: 1850, round2Score: 0, buzzed: false, buzzerTime: null, scored: false },
-    { id: 2, name: 'Player 2', round1Score: 1780, round2Score: 20, buzzed: false, buzzerTime: null, scored: false },
-    { id: 3, name: 'Player 3', round1Score: 1720, round2Score: 0, buzzed: false, buzzerTime: null, scored: false },
-    { id: 4, name: 'Player 4', round1Score: 1680, round2Score: -10, buzzed: false, buzzerTime: null, scored: false },
-    { id: 5, name: 'Player 5', round1Score: 1650, round2Score: 0, buzzed: false, buzzerTime: null, scored: false },
-    { id: 6, name: 'Player 6', round1Score: 1620, round2Score: 20, buzzed: false, buzzerTime: null, scored: false },
-    { id: 7, name: 'Player 7', round1Score: 1590, round2Score: 0, buzzed: false, buzzerTime: null, scored: false },
-    { id: 8, name: 'Player 8', round1Score: 1560, round2Score: 0, buzzed: false, buzzerTime: null, scored: false },
-    { id: 9, name: 'Player 9', round1Score: 1530, round2Score: 20, buzzed: false, buzzerTime: null, scored: false },
-    { id: 10, name: 'Player 10', round1Score: 1500, round2Score: -10, buzzed: false, buzzerTime: null, scored: false },
-  ]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadParticipants();
+    if (gameState) {
+      setSelectedRound(gameState.currentRound || 1);
+    }
+  }, [gameState]);
+
+  const loadParticipants = async () => {
+    try {
+      const result = await FirebaseService.getAllUsers();
+      if (result.success) {
+        const allParticipants = result.users.filter(user => !user.isAdmin);
+        setParticipants(allParticipants);
+        
+        // Get qualified participants for Round 2 (top 10 from Round 1)
+        const qualified = allParticipants
+          .filter(user => user.round1Score > 0)
+          .sort((a, b) => b.round1Score - a.round1Score)
+          .slice(0, 10);
+        
+        setQualifiedParticipants(qualified);
+        
+        // Update qualification status in Firebase
+        await FirebaseService.updateQualifiedUsers(qualified.map(u => u.uid));
+      }
+    } catch (error) {
+      console.error('Error loading participants:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Round 1 Handlers
-  const handleStartRound1 = () => {
-    setRound1Active(true);
-    Alert.alert('Round 1 Started', 'All participants can now see Question 1');
+  const handleStartRound1 = async () => {
+    try {
+      await FirebaseService.updateGameState({
+        round1Active: true,
+        currentRound: 1,
+        gameStarted: true,
+        currentQuestion: 1
+      });
+      Alert.alert('Round 1 Started', 'All participants can now see Question 1');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to start Round 1');
+    }
   };
 
   const handleRound1NextQuestion = () => {
+    const nextQuestion = (gameState?.currentQuestion || 1) + 1;
     Alert.alert(
       'Next Question',
-      `Move all participants to Question ${round1Question + 1}?`,
+      `Move all participants to Question ${nextQuestion}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Continue', 
-          onPress: () => {
-            setRound1Question(round1Question + 1);
-            setRound1Participants(prev => prev.map(p => ({ ...p, answered: false, status: 'waiting' })));
+          onPress: async () => {
+            try {
+              await FirebaseService.updateGameState({
+                currentQuestion: nextQuestion
+              });
+              Alert.alert('Success', `All participants moved to Question ${nextQuestion}`);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update question');
+            }
           }
         }
       ]
@@ -74,8 +100,20 @@ const AdminPanel = ({ navigation }) => {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'End Round 1', 
-          onPress: () => {
-            navigation.navigate('Standings', { round: 1, isAdmin: true });
+          onPress: async () => {
+            try {
+              await FirebaseService.updateGameState({
+                round1Active: false,
+                currentRound: 2
+              });
+              
+              // Qualify top 10 users
+              await loadParticipants();
+              
+              navigation.navigate('Standings', { round: 1, isAdmin: true });
+            } catch (error) {
+              Alert.alert('Error', 'Failed to end Round 1');
+            }
           }
         }
       ]
@@ -83,39 +121,61 @@ const AdminPanel = ({ navigation }) => {
   };
 
   // Round 2 Handlers
+  const handleStartRound2 = async () => {
+    try {
+      await FirebaseService.updateGameState({
+        round2Active: true,
+        currentRound: 2,
+        currentQuestion: 1,
+        round2QuestionActive: false,
+        round2BuzzerActive: false
+      });
+      Alert.alert('Round 2 Started', 'Qualified participants can now see Round 2');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to start Round 2');
+    }
+  };
+
   const handleStartRound2Question = () => {
+    const questionNum = gameState?.currentQuestion || 1;
     Alert.alert(
       'Start Question',
-      `Ready to start Question ${round2Question}? Read the question verbally to participants.`,
+      `Ready to start Question ${questionNum}? Read the question verbally to participants.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Start Question', 
-          onPress: () => {
-            setRound2QuestionActive(true);
-            Alert.alert('Question Started', 'Question is now active. Enable buzzer when ready.');
+          onPress: async () => {
+            try {
+              await FirebaseService.updateGameState({
+                round2QuestionActive: true
+              });
+            } catch (error) {
+              Alert.alert('Error', 'Failed to start question');
+            }
           }
         }
       ]
     );
   };
 
-  const handleEnableBuzzer = () => {
-    if (!round2QuestionActive) {
+  const handleEnableBuzzer = async () => {
+    if (!gameState?.round2QuestionActive) {
       Alert.alert('Error', 'Please start the question first');
       return;
     }
     
-    setBuzzerActive(true);
-    setQualifiedParticipants(prev => prev.map(p => ({ 
-      ...p, 
-      buzzed: false, 
-      buzzerTime: null, 
-      scored: false 
-    })));
-    setBuzzerRankings([]);
-    
-    Alert.alert('Buzzer Enabled!', 'Participants can now press their buzzers');
+    try {
+      await FirebaseService.updateGameState({
+        round2BuzzerActive: true
+      });
+      
+      // Reset buzzer states
+      setBuzzerRankings([]);
+      Alert.alert('Buzzer Active', 'Participants can now buzz in!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to enable buzzer');
+    }
   };
 
   const handleScoreParticipant = (participantId, points) => {
@@ -129,25 +189,27 @@ const AdminPanel = ({ navigation }) => {
   };
 
   const handleRound2NextQuestion = () => {
-    if (round2Question < 15) {
+    const currentQuestion = gameState?.currentQuestion || 1;
+    if (currentQuestion < 15) {
       Alert.alert(
         'Next Question',
-        `Move to Question ${round2Question + 1}?`,
+        `Move to Question ${currentQuestion + 1}?`,
         [
           { text: 'Cancel', style: 'cancel' },
           { 
             text: 'Continue', 
-            onPress: () => {
-              setRound2Question(prev => prev + 1);
-              setRound2QuestionActive(false);
-              setBuzzerActive(false);
-              setBuzzerRankings([]);
-              setQualifiedParticipants(prev => prev.map(p => ({ 
-                ...p, 
-                buzzed: false, 
-                buzzerTime: null, 
-                scored: false 
-              })));
+            onPress: async () => {
+              try {
+                await FirebaseService.updateGameState({
+                  currentQuestion: currentQuestion + 1,
+                  round2QuestionActive: false,
+                  round2BuzzerActive: false
+                });
+                setBuzzerRankings([]);
+                Alert.alert('Success', `Moved to Question ${currentQuestion + 1}`);
+              } catch (error) {
+                Alert.alert('Error', 'Failed to update question');
+              }
             }
           }
         ]
@@ -165,12 +227,21 @@ const AdminPanel = ({ navigation }) => {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Show Final Results', 
-          onPress: () => {
-            navigation.navigate('FinalStandings', { 
-              round: 2, 
-              isAdmin: true,
-              participants: qualifiedParticipants 
-            });
+          onPress: async () => {
+            try {
+              await FirebaseService.updateGameState({
+                round2Active: false,
+                gameEnded: true
+              });
+              
+              navigation.navigate('FinalStandings', { 
+                round: 2, 
+                isAdmin: true,
+                participants: qualifiedParticipants 
+              });
+            } catch (error) {
+              Alert.alert('Error', 'Failed to end Round 2');
+            }
           }
         }
       ]
@@ -231,15 +302,26 @@ const AdminPanel = ({ navigation }) => {
     return 'active';
   };
 
+  if (loading || firebaseLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={styles.loadingText}>Loading admin panel...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Admin Panel</Text>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => navigation.navigate('Dashboard')}
+          onPress={() => navigation.navigate('Login')}
         >
-          <Text style={styles.backButtonText}>Back</Text>
+          <Text style={styles.backButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
 
@@ -268,21 +350,25 @@ const AdminPanel = ({ navigation }) => {
               
               <View style={styles.controlRow}>
                 <Text style={styles.questionText}>
-                  Current Question: {round1Question} / 20
+                  Current Question: {gameState?.currentQuestion || 1} / {gameState?.round1TotalQuestions || 20}
                 </Text>
-                <Text style={[styles.roundStatus, { color: round1Active ? '#27ae60' : '#e74c3c' }]}>
-                  {round1Active ? 'Active' : 'Inactive'}
+                <Text style={[styles.roundStatus, { color: gameState?.round1Active ? '#27ae60' : '#e74c3c' }]}>
+                  {gameState?.round1Active ? 'Active' : 'Inactive'}
                 </Text>
               </View>
 
               <View style={styles.buttonRow}>
-                {!round1Active ? (
+                {!gameState?.round1Active ? (
                   <TouchableOpacity style={styles.startButton} onPress={handleStartRound1}>
                     <Text style={styles.buttonText}>Start Round 1</Text>
                   </TouchableOpacity>
                 ) : (
                   <>
-                    <TouchableOpacity style={styles.nextButton} onPress={handleRound1NextQuestion}>
+                    <TouchableOpacity 
+                      style={styles.nextButton} 
+                      onPress={handleRound1NextQuestion}
+                      disabled={(gameState?.currentQuestion || 1) >= (gameState?.round1TotalQuestions || 20)}
+                    >
                       <Text style={styles.buttonText}>Next Question</Text>
                     </TouchableOpacity>
                     
@@ -296,26 +382,28 @@ const AdminPanel = ({ navigation }) => {
 
             {/* Round 1 Participants */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Round 1 Participants ({round1Participants.length})</Text>
+              <Text style={styles.sectionTitle}>Round 1 Participants ({participants.length})</Text>
               
-              {round1Participants.map((participant) => (
-                <View key={participant.id} style={styles.participantRow}>
-                  <Text style={styles.participantIcon}>
-                    {getStatusIcon(participant.status)}
-                  </Text>
-                  
-                  <View style={styles.participantInfo}>
-                    <Text style={styles.participantName}>{participant.name}</Text>
-                    <Text style={[styles.participantStatus, { color: getStatusColor(participant.status) }]}>
-                      {participant.status}
+              {loading ? (
+                <ActivityIndicator size="large" color={theme.primary} />
+              ) : (
+                participants.map((participant, index) => (
+                  <View key={participant.uid || index} style={styles.participantRow}>
+                    <Text style={styles.participantIcon}>👤</Text>
+                    
+                    <View style={styles.participantInfo}>
+                      <Text style={styles.participantName}>{participant.teamName || 'Anonymous'}</Text>
+                      <Text style={[styles.participantStatus, { color: theme.textSecondary }]}>
+                        Active
+                      </Text>
+                    </View>
+                    
+                    <Text style={styles.participantPoints}>
+                      {participant.round1Score || 0} pts
                     </Text>
                   </View>
-                  
-                  <Text style={styles.participantPoints}>
-                    {participant.points} pts
-                  </Text>
-                </View>
-              ))}
+                ))
+              )}
             </View>
 
             {/* Round 1 Stats */}
@@ -324,24 +412,22 @@ const AdminPanel = ({ navigation }) => {
               
               <View style={styles.statsGrid}>
                 <View style={styles.statCard}>
-                  <Text style={styles.statNumber}>
-                    {round1Participants.filter(p => p.answered).length}
-                  </Text>
-                  <Text style={styles.statLabel}>Answered</Text>
+                  <Text style={styles.statNumber}>{participants.length}</Text>
+                  <Text style={styles.statLabel}>Total Teams</Text>
                 </View>
                 
                 <View style={styles.statCard}>
                   <Text style={styles.statNumber}>
-                    {round1Participants.filter(p => p.status === 'answering').length}
+                    {participants.filter(p => p.round1Score > 0).length}
                   </Text>
-                  <Text style={styles.statLabel}>Answering</Text>
+                  <Text style={styles.statLabel}>Scored</Text>
                 </View>
                 
                 <View style={styles.statCard}>
                   <Text style={styles.statNumber}>
-                    {round1Participants.filter(p => p.status === 'waiting').length}
+                    {Math.min(participants.filter(p => p.round1Score > 0).length, 10)}
                   </Text>
-                  <Text style={styles.statLabel}>Waiting</Text>
+                  <Text style={styles.statLabel}>Qualified</Text>
                 </View>
               </View>
             </View>
@@ -353,43 +439,58 @@ const AdminPanel = ({ navigation }) => {
               <Text style={styles.sectionTitle}>Round 2 Control - Buzzer Round</Text>
               
               <View style={styles.questionStatus}>
-                <Text style={styles.questionText}>Question {round2Question} / 15</Text>
+                <Text style={styles.questionText}>
+                  Question {gameState?.currentQuestion || 1} / {gameState?.round2TotalQuestions || 15}
+                </Text>
                 <View style={styles.statusIndicators}>
-                  <Text style={[styles.statusDot, { backgroundColor: round2QuestionActive ? '#27ae60' : '#e74c3c' }]}>
-                    Question {round2QuestionActive ? 'Active' : 'Inactive'}
+                  <Text style={[styles.statusDot, { backgroundColor: gameState?.round2QuestionActive ? '#27ae60' : '#e74c3c' }]}>
+                    Question {gameState?.round2QuestionActive ? 'Active' : 'Inactive'}
                   </Text>
-                  <Text style={[styles.statusDot, { backgroundColor: buzzerActive ? '#f39c12' : '#95a5a6' }]}>
-                    Buzzer {buzzerActive ? 'Active' : 'Inactive'}
+                  <Text style={[styles.statusDot, { backgroundColor: gameState?.round2BuzzerActive ? '#f39c12' : '#95a5a6' }]}>
+                    Buzzer {gameState?.round2BuzzerActive ? 'Active' : 'Inactive'}
                   </Text>
                 </View>
               </View>
 
               <View style={styles.controlButtons}>
-                <TouchableOpacity 
-                  style={[styles.controlButton, styles.startButton]}
-                  onPress={handleStartRound2Question}
-                  disabled={round2QuestionActive}
-                >
-                  <Text style={styles.buttonText}>Start Question</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.controlButton, styles.buzzerButton]}
-                  onPress={handleEnableBuzzer}
-                  disabled={!round2QuestionActive || buzzerActive}
-                >
-                  <Text style={styles.buttonText}>Enable Buzzer</Text>
-                </TouchableOpacity>
+                {!gameState?.round2Active ? (
+                  <TouchableOpacity 
+                    style={[styles.controlButton, styles.startButton]}
+                    onPress={handleStartRound2}
+                  >
+                    <Text style={styles.buttonText}>Start Round 2</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <TouchableOpacity 
+                      style={[styles.controlButton, styles.startButton]}
+                      onPress={handleStartRound2Question}
+                      disabled={gameState?.round2QuestionActive}
+                    >
+                      <Text style={styles.buttonText}>Start Question</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      style={[styles.controlButton, styles.buzzerButton]}
+                      onPress={handleEnableBuzzer}
+                      disabled={!gameState?.round2QuestionActive || gameState?.round2BuzzerActive}
+                    >
+                      <Text style={styles.buttonText}>Enable Buzzer</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
               
-              <TouchableOpacity 
-                style={[styles.controlButton, styles.nextButton]}
-                onPress={handleRound2NextQuestion}
-              >
-                <Text style={styles.buttonText}>
-                  {round2Question < 15 ? 'Next Question' : 'End Round & Show Results'}
-                </Text>
-              </TouchableOpacity>
+              {gameState?.round2Active && (
+                <TouchableOpacity 
+                  style={[styles.controlButton, styles.nextButton]}
+                  onPress={handleRound2NextQuestion}
+                >
+                  <Text style={styles.buttonText}>
+                    {(gameState?.currentQuestion || 1) < (gameState?.round2TotalQuestions || 15) ? 'Next Question' : 'End Round & Show Results'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Buzzer Rankings */}
@@ -431,41 +532,38 @@ const AdminPanel = ({ navigation }) => {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Qualified Participants (Top 10)</Text>
               
-              {qualifiedParticipants.map((participant) => {
-                const status = getBuzzerStatus(participant);
-                return (
-                  <View key={participant.id} style={styles.participantRow}>
-                    <Text style={styles.participantIcon}>
-                      {getStatusIcon(status)}
-                    </Text>
+              {loading ? (
+                <ActivityIndicator size="large" color={theme.primary} />
+              ) : (
+                qualifiedParticipants.map((participant, index) => (
+                  <View key={participant.uid || index} style={styles.participantRow}>
+                    <Text style={styles.participantIcon}>🏆</Text>
                     
                     <View style={styles.participantInfo}>
-                      <Text style={styles.participantName}>{participant.name}</Text>
-                      <Text style={[styles.participantStatus, { color: getStatusColor(status) }]}>
-                        {status} {participant.buzzerTime && `(${participant.buzzerTime}ms)`}
+                      <Text style={styles.participantName}>{participant.teamName || 'Anonymous'}</Text>
+                      <Text style={[styles.participantStatus, { color: theme.success }]}>
+                        Qualified
                       </Text>
                     </View>
                     
                     <View style={styles.scoreInfo}>
-                      <Text style={styles.round1Score}>R1: {participant.round1Score}</Text>
+                      <Text style={styles.round1Score}>R1: {participant.round1Score || 0}</Text>
                       <Text style={[
                         styles.round2Score,
-                        { color: participant.round2Score >= 0 ? '#27ae60' : '#e74c3c' }
+                        { color: (participant.round2Score || 0) >= 0 ? '#27ae60' : '#e74c3c' }
                       ]}>
-                        R2: {participant.round2Score >= 0 ? '+' : ''}{participant.round2Score}
+                        R2: {(participant.round2Score || 0) >= 0 ? '+' : ''}{participant.round2Score || 0}
                       </Text>
                     </View>
-                    
-                    <TouchableOpacity 
-                      style={styles.testBuzzer}
-                      onPress={() => simulateBuzzer(participant.id)}
-                      disabled={!buzzerActive || participant.buzzed}
-                    >
-                      <Text style={styles.testBuzzerText}>Test</Text>
-                    </TouchableOpacity>
                   </View>
-                );
-              })}
+                ))
+              )}
+              
+              {!loading && qualifiedParticipants.length === 0 && (
+                <Text style={styles.noParticipantsText}>
+                  No qualified participants yet. Complete Round 1 first.
+                </Text>
+              )}
             </View>
           </>
         )}
@@ -478,6 +576,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: theme.textSecondary,
+    marginTop: 10,
+    fontSize: 16,
   },
   header: {
     backgroundColor: theme.surface,
@@ -749,6 +857,12 @@ const styles = StyleSheet.create({
     color: theme.textInverse,
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  noParticipantsText: {
+    color: theme.textSecondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 20,
   },
 });
 

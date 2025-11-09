@@ -1,25 +1,78 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme, shadows, typography } from '../theme';
+import { FirebaseService } from '../firebase/gameService';
+import { useFirebase } from '../hooks/useFirebase';
 
 const StandingsScreen = ({ navigation, route }) => {
-  const { points } = route.params || { points: 0 };
-  
-  // Sample standings data (this will come from your backend)
-  const standings = [
-    { rank: 1, name: 'Player 1', points: 1850, isCurrentUser: false },
-    { rank: 2, name: 'You', points: points, isCurrentUser: true },
-    { rank: 3, name: 'Player 3', points: 1650, isCurrentUser: false },
-    { rank: 4, name: 'Player 4', points: 1500, isCurrentUser: false },
-    { rank: 5, name: 'Player 5', points: 1350, isCurrentUser: false },
-  ];
+  const { round = 1, isAdmin = false } = route.params || {};
+  const { user } = useFirebase();
+  const [standings, setStandings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState(null);
+
+  useEffect(() => {
+    loadStandings();
+    if (user && !isAdmin) {
+      loadUserProfile();
+    }
+  }, [round]);
+
+  const loadStandings = async () => {
+    try {
+      const result = await FirebaseService.getAllUsers();
+      if (result.success) {
+        // Filter out admins and sort by the appropriate round score
+        const users = result.users.filter(user => !user.isAdmin);
+        
+        let sortedUsers;
+        if (round === 1) {
+          sortedUsers = users.sort((a, b) => (b.round1Score || 0) - (a.round1Score || 0));
+        } else if (round === 2) {
+          sortedUsers = users
+            .filter(user => user.qualified)
+            .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+        } else {
+          // Final standings - total score
+          sortedUsers = users.sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+        }
+
+        // Add rank to each user
+        const rankedUsers = sortedUsers.map((user, index) => ({
+          ...user,
+          rank: index + 1,
+          isCurrentUser: user.uid === user?.uid
+        }));
+
+        setStandings(rankedUsers);
+      }
+    } catch (error) {
+      console.error('Error loading standings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadUserProfile = async () => {
+    if (user) {
+      try {
+        const profile = await FirebaseService.getUserProfile(user.uid);
+        if (profile.success) {
+          setUserProfile(profile.data);
+        }
+      } catch (error) {
+        console.error('Error loading user profile:', error);
+      }
+    }
+  };
 
   const getRankColor = (rank) => {
     switch (rank) {
@@ -39,15 +92,61 @@ const StandingsScreen = ({ navigation, route }) => {
     }
   };
 
+  const getScoreToShow = (player) => {
+    if (round === 1) return player.round1Score || 0;
+    if (round === 2) return player.round2Score || 0;
+    return player.totalScore || 0;
+  };
+
+  const getStandingsTitle = () => {
+    if (round === 1) return 'Round 1 Standings';
+    if (round === 2) return 'Round 2 Standings';
+    return 'Final Standings';
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={styles.loadingText}>Loading standings...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Final Standings</Text>
+        <Text style={styles.headerTitle}>{getStandingsTitle()}</Text>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>Back</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content}>
+        {/* User's Current Position (if not admin) */}
+        {!isAdmin && userProfile && (
+          <View style={styles.userStatsContainer}>
+            <Text style={styles.userStatsTitle}>Your Performance</Text>
+            <View style={styles.userStatsRow}>
+              <Text style={styles.userStatsLabel}>Current Rank:</Text>
+              <Text style={styles.userStatsValue}>
+                #{standings.find(s => s.uid === user.uid)?.rank || 'N/A'}
+              </Text>
+            </View>
+            <View style={styles.userStatsRow}>
+              <Text style={styles.userStatsLabel}>Points:</Text>
+              <Text style={styles.userStatsValue}>{getScoreToShow(userProfile)}</Text>
+            </View>
+          </View>
+        )}
+
         <View style={styles.standingsContainer}>
-          {standings.map((player) => (
+          {standings.length > 0 ? standings.map((player) => (
             <View 
               key={player.rank} 
               style={[
@@ -66,7 +165,7 @@ const StandingsScreen = ({ navigation, route }) => {
                   styles.playerName,
                   player.isCurrentUser && styles.currentUserText
                 ]}>
-                  {player.name}
+                  {player.teamName || 'Anonymous'}
                 </Text>
               </View>
               
@@ -75,11 +174,15 @@ const StandingsScreen = ({ navigation, route }) => {
                   styles.playerPoints,
                   player.isCurrentUser && styles.currentUserText
                 ]}>
-                  {player.points} pts
+                  {getScoreToShow(player)} pts
                 </Text>
               </View>
             </View>
-          ))}
+          )) : (
+            <View style={styles.noDataContainer}>
+              <Text style={styles.noDataText}>No standings data available</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -99,6 +202,51 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: theme.textSecondary,
+    marginTop: 10,
+    fontSize: 16,
+  },
+  userStatsContainer: {
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    padding: 20,
+    margin: 20,
+    ...shadows.medium,
+  },
+  userStatsTitle: {
+    ...typography.h3,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  userStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 5,
+  },
+  userStatsLabel: {
+    ...typography.body,
+    color: theme.textSecondary,
+  },
+  userStatsValue: {
+    ...typography.body,
+    fontWeight: 'bold',
+    color: theme.primary,
+  },
+  noDataContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  noDataText: {
+    ...typography.body,
+    color: theme.textSecondary,
+    fontStyle: 'italic',
   },
   header: {
     backgroundColor: theme.surface,

@@ -11,36 +11,63 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { theme, shadows, typography } from "../theme";
+import { FirebaseService } from "../firebase/gameService";
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [teamName, setTeamName] = useState("");
 
   const handleLogin = async () => {
-    if (email == "admin@csesa" && password == "arguemind") {
+    // Admin login (unchanged)
+    if (email === "admin@csesa" && password === "arguemind") {
       navigation.navigate("Admin");
-    } else {
-      navigation.navigate("Dashboard");
+      return;
+    }
+    else{
 
-      /*
+    // Firebase authentication for participants
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
-    }*/
+    }
 
-      setLoading(true);
+    if (isSignUp && !teamName.trim()) {
+      Alert.alert('Error', 'Please enter your team name');
+      return;
+    }
 
-      // Simulate login API call
-      setTimeout(() => {
-        setLoading(false);
-        // Simple validation for demo purposes
-        navigation.navigate("Dashboard");
-        /* if (email.includes('@') && password.length >= 6) {
+    setLoading(true);
+
+    try {
+      let result;
+      
+      if (isSignUp) {
+        // Register new user
+        result = await FirebaseService.registerUser(email, password, teamName);
+        if (result.success) {
+          Alert.alert('Success', 'Account created successfully!', [
+            { text: 'OK', onPress: () => navigation.navigate("Dashboard") }
+          ]);
+        }
       } else {
-        Alert.alert('Login Failed', 'Invalid email or password');
-      }*/
-      }, 1000);
+        // Login existing user
+        result = await FirebaseService.loginUser(email, password);
+        if (result.success) {
+          navigation.navigate("Dashboard");
+        }
+      }
+
+      if (!result.success) {
+        Alert.alert('Authentication Failed', result.error);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
     }
   };
 
@@ -66,6 +93,17 @@ const LoginScreen = ({ navigation }) => {
               autoCorrect={false}
             />
 
+            {isSignUp && (
+              <TextInput
+                style={styles.input}
+                placeholder="Team Name"
+                placeholderTextColor={theme.placeholder}
+                value={teamName}
+                onChangeText={setTeamName}
+                autoCapitalize="words"
+              />
+            )}
+
             <TextInput
               style={styles.input}
               placeholder="Password"
@@ -82,7 +120,17 @@ const LoginScreen = ({ navigation }) => {
               disabled={loading}
             >
               <Text style={styles.loginButtonText}>
-                {loading ? "Signing In..." : "Sign In"}
+                {loading ? (isSignUp ? "Creating Account..." : "Signing In...") : (isSignUp ? "Create Account" : "Sign In")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.toggleButton}
+              onPress={() => setIsSignUp(!isSignUp)}
+              disabled={loading}
+            >
+              <Text style={styles.toggleButtonText}>
+                {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -146,6 +194,15 @@ const styles = StyleSheet.create({
     color: theme.textPrimary,
     fontSize: 18,
     fontWeight: "600",
+  },
+  toggleButton: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  toggleButtonText: {
+    color: theme.primary,
+    fontSize: 16,
+    fontWeight: "500",
   },
 });
 

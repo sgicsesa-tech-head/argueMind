@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,46 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  Image
+  Image,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme, shadows, typography } from '../theme';
+import { FirebaseService } from '../firebase/gameService';
+import { useFirebase } from '../hooks/useFirebase';
 
 const DashboardScreen = ({ navigation }) => {
-  const handleLogout = () => {
+  const { user, gameState, loading: firebaseLoading } = useFirebase();
+  const [userProfile, setUserProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    console.log('DashboardScreen: useEffect triggered, user:', user ? 'exists' : 'null');
+    console.log('DashboardScreen: gameState:', gameState);
+    loadUserProfile();
+  }, [user]);
+
+  const loadUserProfile = async () => {
+    if (user) {
+      console.log('Loading profile for user:', user.uid);
+      try {
+        const profile = await FirebaseService.getUserProfile(user.uid);
+        if (profile.success) {
+          console.log('Profile loaded successfully:', profile.data);
+          setUserProfile(profile.data);
+        } else {
+          console.log('Failed to load profile:', profile.error);
+        }
+      } catch (error) {
+        console.error('Error loading user profile:', error);
+      }
+    } else {
+      console.log('No user found, skipping profile load');
+    }
+    setLoading(false);
+  };
+
+  const handleLogout = async () => {
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -23,42 +56,145 @@ const DashboardScreen = ({ navigation }) => {
         },
         {
           text: 'Logout',
-          onPress: () => navigation.navigate('Login'),
+          onPress: async () => {
+            await FirebaseService.signOut();
+            navigation.navigate('Login');
+          },
         },
       ]
     );
   };
+
+  const handleRound1Press = () => {
+    if (gameState?.round1Active) {
+      navigation.navigate('Game', { roundNumber: 1 });
+    } else {
+      Alert.alert('Round 1', 'Round 1 is not currently active. Please wait for the admin to start the round.');
+    }
+  };
+
+  const handleRound2Press = () => {
+    if (gameState?.round2Active) {
+      if (userProfile?.qualified) {
+        navigation.navigate('Round2Game');
+      } else {
+        Alert.alert('Round 2', 'You are not qualified for Round 2. Only top teams from Round 1 can participate.');
+      }
+    } else {
+      Alert.alert('Round 2', 'Round 2 is not currently active. Please wait for the admin to start the round.');
+    }
+  };
+
+  if (loading || firebaseLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
 
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-            <Text style={styles.welcomeText}>Team Name</Text>
+        <Text style={styles.welcomeText}>{userProfile?.teamName || 'Team'}</Text>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.intro}>
-        <Image style={styles.logo} source={require('../assets/csesa.png')} />
-        <Text style={styles.welcomeText}>Welcome to Argue Mind</Text>
-      </View>
-      <View style={styles.content}>
-        <TouchableOpacity 
-          style={styles.roundButton}
-          onPress={() => navigation.navigate('Game', { roundNumber: 1 })}
-        >
-          <Text style={styles.roundButtonText}>Round 1</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.roundButton}
-          onPress={() => navigation.navigate('Round2Game')}
-        >
-          <Text style={styles.roundButtonText}>Round 2</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView style={styles.scrollView}>
+        <View style={styles.intro}>
+          <Image style={styles.logo} source={require('../assets/csesa.png')} />
+          <Text style={styles.welcomeText}>Welcome to ArgueMind</Text>
+          <Text style={styles.subtitleText}>
+            {gameState?.gameStarted ? 'Game is in progress' : 'Waiting for game to start...'}
+          </Text>
+        </View>
+
+        {userProfile && (
+          <View style={styles.statsContainer}>
+            <Text style={styles.statsTitle}>Your Stats</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Round 1 Score</Text>
+                <Text style={styles.statValue}>{userProfile.round1Score || 0}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Round 2 Score</Text>
+                <Text style={styles.statValue}>{userProfile.round2Score || 0}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Total Score</Text>
+                <Text style={styles.statValue}>{userProfile.totalScore || 0}</Text>
+              </View>
+            </View>
+            {userProfile.qualified && (
+              <View style={styles.qualifiedBadge}>
+                <Text style={styles.qualifiedText}>✓ Qualified for Round 2</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        <View style={styles.content}>
+          <TouchableOpacity 
+            style={[
+              styles.roundButton, 
+              !gameState?.round1Active && styles.disabledButton
+            ]}
+            onPress={handleRound1Press}
+            disabled={!gameState?.round1Active}
+          >
+            <Text style={[
+              styles.roundButtonText,
+              !gameState?.round1Active && styles.disabledButtonText
+            ]}>
+              Round 1: Word Challenge
+            </Text>
+            <Text style={[
+              styles.roundSubtext,
+              !gameState?.round1Active && styles.disabledButtonText
+            ]}>
+              {gameState?.round1Active ? 'Active - Tap to join' : 'Waiting for admin to start'}
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[
+              styles.roundButton,
+              (!gameState?.round2Active || !userProfile?.qualified) && styles.disabledButton
+            ]}
+            onPress={handleRound2Press}
+            disabled={!gameState?.round2Active || !userProfile?.qualified}
+          >
+            <Text style={[
+              styles.roundButtonText,
+              (!gameState?.round2Active || !userProfile?.qualified) && styles.disabledButtonText
+            ]}>
+              Round 2: Quiz Battle
+            </Text>
+            <Text style={[
+              styles.roundSubtext,
+              (!gameState?.round2Active || !userProfile?.qualified) && styles.disabledButtonText
+            ]}>
+              {!userProfile?.qualified ? 'Qualify in Round 1 first' : 
+               gameState?.round2Active ? 'Active - Tap to join' : 'Waiting for admin to start'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.standingsButton}
+            onPress={() => navigation.navigate('Standings')}
+          >
+            <Text style={styles.standingsButtonText}>View Standings</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -67,6 +203,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    ...typography.body,
+    marginTop: 10,
   },
   header: {
     flexDirection: 'row',
@@ -78,13 +223,66 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
   },
+  scrollView: {
+    flex: 1,
+  },
   welcomeText: {
     ...typography.h2,
   },
+  subtitleText: {
+    ...typography.caption,
+    textAlign: 'center',
+    marginTop: 5,
+  },
+  intro: {
+    alignItems: 'center',
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+  },
   logo: {
-    marginBottom: 10,
     width: 250,
     height: 250,
+    marginBottom: 20,
+  },
+  statsContainer: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    padding: 20,
+    ...shadows.medium,
+  },
+  statsTitle: {
+    ...typography.h3,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statLabel: {
+    ...typography.caption,
+    marginBottom: 5,
+  },
+  statValue: {
+    ...typography.h3,
+    color: theme.primary,
+  },
+  qualifiedBadge: {
+    marginTop: 15,
+    backgroundColor: theme.success,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignSelf: 'center',
+  },
+  qualifiedText: {
+    color: theme.textPrimary,
+    fontWeight: '600',
   },
   logoutButton: {
     backgroundColor: theme.error,
@@ -98,34 +296,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  intro: {
-    alignItems: 'center',
-    marginTop: 50,
-    marginBottom: -25,
-  },
   content: {
-    flex: 1,
-    justifyContent: 'center',
     paddingHorizontal: 20,
-    alignItems: 'center',
-    height: "50%"
+    paddingBottom: 30,
   },
   roundButton: {
-    width: "75%",
-    height: '15%',
     backgroundColor: theme.primary,
-    borderRadius: 8,
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    marginBottom: 20,
+    borderRadius: 15,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    marginVertical: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.medium,
+    ...shadows.large,
+  },
+  disabledButton: {
+    backgroundColor: theme.surface,
+    borderWidth: 1,
+    borderColor: theme.border,
+    ...shadows.small,
   },
   roundButtonText: {
     color: theme.textPrimary,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  roundSubtext: {
+    color: theme.textSecondary,
+    fontSize: 14,
+  },
+  disabledButtonText: {
+    color: theme.textMuted,
+  },
+  standingsButton: {
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    paddingVertical: 15,
+    marginTop: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.border,
+    ...shadows.small,
+  },
+  standingsButtonText: {
+    color: theme.primary,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { FirebaseService } from './firebase/gameService';
 
 import LoginScreen from './screens/LoginScreen';
 import DashboardScreen from './screens/DashboardScreen';
@@ -15,6 +16,11 @@ import FinalStandingsScreen from './screens/FinalStandingsScreen';
 const Stack = createStackNavigator();
 
 export default function App() {
+  useEffect(() => {
+    // Initialize Firebase app and create game state if needed
+    FirebaseService.initializeApp().catch(console.error);
+  }, []);
+
   return (
     <SafeAreaProvider>
       <NavigationContainer>
