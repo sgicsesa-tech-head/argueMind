@@ -7,6 +7,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { theme, shadows, typography } from '../theme';
 
 const StandingsScreen = ({ navigation, route }) => {
   const { points } = route.params || { points: 0 };
@@ -97,20 +98,19 @@ const StandingsScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.background,
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     paddingHorizontal: 20,
     paddingVertical: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e1e8ed',
+    borderBottomColor: theme.border,
     alignItems: 'center',
   },
   headerTitle: {
+    ...typography.h2,
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
   },
   content: {
     flex: 1,
@@ -120,25 +120,18 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   playerRow: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 15,
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    ...shadows.small,
   },
   currentUserRow: {
-    backgroundColor: '#e8f4fd',
+    backgroundColor: theme.surfaceElevated,
     borderWidth: 2,
-    borderColor: '#3498db',
+    borderColor: theme.primary,
   },
   rankContainer: {
     width: 50,
@@ -155,10 +148,10 @@ const styles = StyleSheet.create({
   playerName: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: theme.textPrimary,
   },
   currentUserText: {
-    color: '#3498db',
+    color: theme.primary,
     fontWeight: 'bold',
   },
   pointsContainer: {
@@ -167,22 +160,23 @@ const styles = StyleSheet.create({
   playerPoints: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#27ae60',
+    color: theme.success,
   },
   footer: {
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderTopWidth: 1,
-    borderTopColor: '#e1e8ed',
+    borderTopColor: theme.border,
   },
   backButton: {
-    backgroundColor: '#3498db',
+    backgroundColor: theme.primary,
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: 'center',
+    ...shadows.small,
   },
   backButtonText: {
-    color: '#fff',
+    color: theme.textInverse,
     fontSize: 18,
     fontWeight: 'bold',
   },

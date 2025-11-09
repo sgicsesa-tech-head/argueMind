@@ -6,8 +6,10 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { theme, shadows, typography } from '../theme';
 
 const DashboardScreen = ({ navigation }) => {
   const handleLogout = () => {
@@ -32,12 +34,16 @@ const DashboardScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.welcomeText}>Welcome to Argue Mind</Text>
+            <Text style={styles.welcomeText}>Team Name</Text>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
 
+      <View style={styles.intro}>
+        <Image style={styles.logo} source={require('../assets/csesa.png')} />
+        <Text style={styles.welcomeText}>Welcome to Argue Mind</Text>
+      </View>
       <View style={styles.content}>
         <TouchableOpacity 
           style={styles.roundButton}
@@ -60,7 +66,7 @@ const DashboardScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.background,
   },
   header: {
     flexDirection: 'row',
@@ -68,25 +74,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e1e8ed',
+    borderBottomColor: theme.border,
   },
   welcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    ...typography.h2,
+  },
+  logo: {
+    marginBottom: 10,
+    width: 250,
+    height: 250,
   },
   logoutButton: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: theme.error,
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 8,
+    ...shadows.small,
   },
   logoutButtonText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 14,
     fontWeight: '600',
+  },
+  intro: {
+    alignItems: 'center',
+    marginTop: 50,
+    marginBottom: -25,
   },
   content: {
     flex: 1,
@@ -98,25 +113,17 @@ const styles = StyleSheet.create({
   roundButton: {
     width: "75%",
     height: '15%',
-    backgroundColor: '#3498db',
+    backgroundColor: theme.primary,
     borderRadius: 8,
     paddingVertical: 15,
     paddingHorizontal: 30,
     marginBottom: 20,
     alignItems: 'center',
-    shadowColor: '#3498db',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 5,
     justifyContent: 'center',
-    alignItems: 'center',
+    ...shadows.medium,
   },
   roundButtonText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 20,
     fontWeight: 'bold',
   },
