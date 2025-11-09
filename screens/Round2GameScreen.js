@@ -8,6 +8,7 @@ import {
   Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { theme, shadows, typography } from '../theme';
 
 const Round2GameScreen = ({ navigation, route }) => {
   // Game configuration
@@ -174,28 +175,25 @@ const Round2GameScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.background,
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#e1e8ed',
+    borderBottomColor: theme.border,
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    ...typography.h3,
   },
   questionCounter: {
-    fontSize: 16,
-    color: '#7f8c8d',
+    ...typography.caption,
     marginTop: 5,
   },
   pointsContainer: {
-    backgroundColor: '#3498db',
+    backgroundColor: theme.primary,
     paddingVertical: 10,
     paddingHorizontal: 20,
     flexDirection: 'row',
@@ -203,32 +201,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pointsText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 18,
     fontWeight: 'bold',
   },
   qualifiedText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 14,
   },
   questionContainer: {
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     margin: 20,
     borderRadius: 12,
     alignItems: 'center',
+    ...shadows.small,
   },
   questionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    ...typography.h2,
     marginBottom: 10,
   },
   questionInstruction: {
-    fontSize: 16,
-    color: '#7f8c8d',
+    ...typography.body,
     textAlign: 'center',
     lineHeight: 24,
+    color: theme.textSecondary,
   },
   buzzerSection: {
     alignItems: 'center',

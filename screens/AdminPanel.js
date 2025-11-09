@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { theme, shadows, typography } from '../theme';
 
 const AdminPanel = ({ navigation }) => {
   const [selectedRound, setSelectedRound] = useState(1);
@@ -476,14 +477,14 @@ const AdminPanel = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.background,
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#e1e8ed',
+    borderBottomColor: theme.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -491,16 +492,16 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.textPrimary,
   },
   backButton: {
-    backgroundColor: '#7f8c8d',
+    backgroundColor: theme.buttonSecondary,
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 8,
   },
   backButtonText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -509,23 +510,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   section: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 20,
     marginVertical: 10,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    ...shadows.medium,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.textPrimary,
     marginBottom: 15,
   },
   controlRow: {
@@ -536,7 +530,7 @@ const styles = StyleSheet.create({
   },
   questionText: {
     fontSize: 16,
-    color: '#2c3e50',
+    color: theme.textPrimary,
     fontWeight: '600',
   },
   roundStatus: {
@@ -548,32 +542,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   startButton: {
-    backgroundColor: '#27ae60',
+    backgroundColor: theme.buttonSuccess,
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 30,
     flex: 1,
     alignItems: 'center',
+    ...shadows.small,
   },
   nextButton: {
-    backgroundColor: '#3498db',
+    backgroundColor: theme.primary,
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 20,
     flex: 1,
     alignItems: 'center',
     marginRight: 10,
+    ...shadows.small,
   },
   endButton: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: theme.buttonDanger,
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 20,
     flex: 1,
     alignItems: 'center',
+    ...shadows.small,
   },
   buttonText: {
-    color: '#fff',
+    color: theme.textInverse,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -582,7 +579,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f2f6',
+    borderBottomColor: theme.divider,
   },
   participantIcon: {
     fontSize: 20,
@@ -594,7 +591,7 @@ const styles = StyleSheet.create({
   participantName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: theme.textPrimary,
   },
   participantStatus: {
     fontSize: 14,
@@ -603,7 +600,7 @@ const styles = StyleSheet.create({
   participantPoints: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#27ae60',
+    color: theme.success,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -612,32 +609,29 @@ const styles = StyleSheet.create({
   statCard: {
     alignItems: 'center',
     padding: 15,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.surfaceElevated,
     borderRadius: 8,
     flex: 1,
     marginHorizontal: 5,
+    ...shadows.small,
   },
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#3498db',
+    color: theme.primary,
   },
   statLabel: {
     fontSize: 12,
-    color: '#7f8c8d',
+    color: theme.textSecondary,
     marginTop: 5,
   },
   roundSelector: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 5,
     margin: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    ...shadows.medium,
   },
   roundTab: {
     flex: 1,
@@ -646,15 +640,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   activeTab: {
-    backgroundColor: '#3498db',
+    backgroundColor: theme.primary,
   },
   tabText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#7f8c8d',
+    color: theme.textSecondary,
   },
   activeTabText: {
-    color: '#fff',
+    color: theme.textInverse,
   },
   questionStatus: {
     marginBottom: 15,
@@ -683,31 +677,32 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginHorizontal: 5,
+    ...shadows.small,
   },
   buzzerButton: {
-    backgroundColor: '#f39c12',
+    backgroundColor: theme.buttonWarning,
   },
   rankingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f2f6',
+    borderBottomColor: theme.divider,
   },
   rankPosition: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#3498db',
+    color: theme.primary,
     width: 30,
   },
   rankName: {
     fontSize: 16,
-    color: '#2c3e50',
+    color: theme.textPrimary,
     flex: 1,
   },
   rankTime: {
     fontSize: 14,
-    color: '#27ae60',
+    color: theme.success,
     fontWeight: 'bold',
     marginRight: 10,
   },
@@ -715,20 +710,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   scoreButtonSmall: {
-    backgroundColor: '#27ae60',
+    backgroundColor: theme.success,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
     marginHorizontal: 2,
   },
   neutralScore: {
-    backgroundColor: '#7f8c8d',
+    backgroundColor: theme.textMuted,
   },
   negativeScore: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: theme.error,
   },
   scoreText: {
-    color: '#fff',
+    color: theme.textInverse,
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -738,20 +733,20 @@ const styles = StyleSheet.create({
   },
   round1Score: {
     fontSize: 11,
-    color: '#7f8c8d',
+    color: theme.textSecondary,
   },
   round2Score: {
     fontSize: 12,
     fontWeight: 'bold',
   },
   testBuzzer: {
-    backgroundColor: '#9b59b6',
+    backgroundColor: theme.secondary,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
   },
   testBuzzerText: {
-    color: '#fff',
+    color: theme.textInverse,
     fontSize: 10,
     fontWeight: 'bold',
   },

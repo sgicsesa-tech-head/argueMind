@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { theme, shadows, typography } from '../theme';
 
 const DashboardScreen = ({ navigation }) => {
   const handleLogout = () => {
@@ -60,7 +61,7 @@ const DashboardScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.background,
   },
   header: {
     flexDirection: 'row',
@@ -68,23 +69,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e1e8ed',
+    borderBottomColor: theme.border,
   },
   welcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    ...typography.h2,
   },
   logoutButton: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: theme.error,
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 8,
+    ...shadows.small,
   },
   logoutButtonText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -98,25 +98,17 @@ const styles = StyleSheet.create({
   roundButton: {
     width: "75%",
     height: '15%',
-    backgroundColor: '#3498db',
+    backgroundColor: theme.primary,
     borderRadius: 8,
     paddingVertical: 15,
     paddingHorizontal: 30,
     marginBottom: 20,
     alignItems: 'center',
-    shadowColor: '#3498db',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 5,
     justifyContent: 'center',
-    alignItems: 'center',
+    ...shadows.medium,
   },
   roundButtonText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 20,
     fontWeight: 'bold',
   },

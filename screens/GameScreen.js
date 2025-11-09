@@ -9,6 +9,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { theme, shadows, typography } from '../theme';
 
 const GameScreen = ({ navigation, route }) => {
   const { roundNumber } = route.params || { roundNumber: 1 };
@@ -201,38 +202,36 @@ const GameScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.background,
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#e1e8ed',
+    borderBottomColor: theme.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    ...typography.h3,
   },
   questionCounter: {
-    fontSize: 16,
-    color: '#7f8c8d',
+    ...typography.caption,
   },
   timer: {
     fontSize: 18,
     fontWeight: 'bold',
+    color: theme.textPrimary,
   },
   pointsContainer: {
-    backgroundColor: '#3498db',
+    backgroundColor: theme.primary,
     paddingVertical: 10,
     alignItems: 'center',
   },
   pointsText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -250,7 +249,7 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#e1e8ed',
+    borderColor: theme.border,
   },
   wordContainer: {
     alignItems: 'center',
@@ -259,45 +258,40 @@ const styles = StyleSheet.create({
   underlines: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.textPrimary,
     letterSpacing: 8,
   },
   inputContainer: {
     alignItems: 'center',
   },
   answerInput: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     paddingVertical: 15,
     paddingHorizontal: 20,
     fontSize: 18,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#e1e8ed',
+    borderColor: theme.border,
     width: '100%',
     textAlign: 'center',
     textTransform: 'uppercase',
+    color: theme.textPrimary,
+    ...shadows.small,
   },
   submitButton: {
-    backgroundColor: '#27ae60',
+    backgroundColor: theme.success,
     borderRadius: 12,
     paddingVertical: 15,
     paddingHorizontal: 40,
-    shadowColor: '#27ae60',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 5,
+    ...shadows.medium,
   },
   disabledButton: {
-    backgroundColor: '#bdc3c7',
-    shadowOpacity: 0.1,
+    backgroundColor: theme.textMuted,
+    ...shadows.small,
   },
   submitButtonText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -308,32 +302,34 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 10,
+    color: theme.textPrimary,
   },
   correctText: {
-    color: '#27ae60',
+    color: theme.success,
   },
   incorrectText: {
-    color: '#e74c3c',
+    color: theme.error,
   },
   waitingText: {
     fontSize: 16,
-    color: '#7f8c8d',
+    color: theme.textSecondary,
     fontStyle: 'italic',
   },
   adminControls: {
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderTopWidth: 1,
-    borderTopColor: '#e1e8ed',
+    borderTopColor: theme.border,
   },
   adminButton: {
-    backgroundColor: '#9b59b6',
+    backgroundColor: theme.secondary,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
+    ...shadows.small,
   },
   adminButtonText: {
-    color: '#fff',
+    color: theme.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },

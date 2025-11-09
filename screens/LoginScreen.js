@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { theme, shadows, typography } from "../theme";
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -57,7 +58,7 @@ const LoginScreen = ({ navigation }) => {
             <TextInput
               style={styles.input}
               placeholder="Email"
-              placeholderTextColor="#999"
+              placeholderTextColor={theme.placeholder}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -68,7 +69,7 @@ const LoginScreen = ({ navigation }) => {
             <TextInput
               style={styles.input}
               placeholder="Password"
-              placeholderTextColor="#999"
+              placeholderTextColor={theme.placeholder}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -94,7 +95,7 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: theme.background,
   },
   keyboardView: {
     flex: 1,
@@ -105,15 +106,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
   },
   title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#2c3e50",
+    ...typography.h1,
     textAlign: "center",
     marginBottom: 10,
   },
   subtitle: {
-    fontSize: 16,
-    color: "#7f8c8d",
+    ...typography.caption,
     textAlign: "center",
     marginBottom: 40,
   },
@@ -121,44 +119,31 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: theme.surface,
     borderRadius: 12,
     paddingVertical: 15,
     paddingHorizontal: 20,
     fontSize: 16,
     marginBottom: 15,
     borderWidth: 1,
-    borderColor: "#e1e8ed",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    borderColor: theme.border,
+    color: theme.textPrimary,
+    ...shadows.small,
   },
   loginButton: {
-    backgroundColor: "#3498db",
+    backgroundColor: theme.primary,
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
     marginTop: 10,
-    shadowColor: "#3498db",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 5,
+    ...shadows.medium,
   },
   disabledButton: {
-    backgroundColor: "#bdc3c7",
-    shadowOpacity: 0.1,
+    backgroundColor: theme.textMuted,
+    ...shadows.small,
   },
   loginButtonText: {
-    color: "#fff",
+    color: theme.textPrimary,
     fontSize: 18,
     fontWeight: "600",
   },
