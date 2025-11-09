@@ -282,7 +282,7 @@ const AdminPanel = ({ navigation }) => {
   const handleEndRound2 = () => {
     Alert.alert(
       'End Round 2',
-      'This will show final standings and end the game',
+      'This will show Round 2 standings and end the game',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -293,8 +293,8 @@ const AdminPanel = ({ navigation }) => {
                 round2Active: false,
                 gameEnded: true
               });
-              navigation.navigate('FinalStandings', { 
-                participants: qualifiedParticipants,
+              navigation.navigate('Standings', { 
+                round: 2,
                 isAdmin: true 
               });
             } catch (error) {

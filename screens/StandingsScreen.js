@@ -37,9 +37,10 @@ const StandingsScreen = ({ navigation, route }) => {
         if (round === 1) {
           sortedUsers = users.sort((a, b) => (b.round1Score || 0) - (a.round1Score || 0));
         } else if (round === 2) {
+          // Round 2 standings show only R2 scores for qualified users
           sortedUsers = users
             .filter(user => user.qualified)
-            .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+            .sort((a, b) => (b.round2Score || 0) - (a.round2Score || 0));
         } else {
           // Final standings - total score
           sortedUsers = users.sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
@@ -94,7 +95,7 @@ const StandingsScreen = ({ navigation, route }) => {
 
   const getScoreToShow = (player) => {
     if (round === 1) return player.round1Score || 0;
-    if (round === 2) return player.round2Score || 0;
+    if (round === 2) return player.round2Score || 0; // Only R2 score
     return player.totalScore || 0;
   };
 
