@@ -82,7 +82,14 @@ const GameScreen = ({ navigation, route }) => {
         submitFinalRound1Score();
       }
     }
-  }, [gameState?.currentQuestion, gameState?.currentRound, gameState?.round1Active, questionsData]);
+
+    // Cleanup function to prevent memory leaks and unexpected behavior
+    return () => {
+      // This is a good place to detach any listeners if they were attached directly in this component
+      // For now, we'll just log that the component is unmounting or re-rendering
+      console.log("GameScreen effect cleanup for gameState changes.");
+    };
+  }, [gameState?.currentQuestion, gameState?.currentRound, gameState?.round1Active, questionsData, hasSubmittedFinalScore]);
 
   // OPTIMIZED Timer - Calculate locally from start time to reduce Firebase reads
   useEffect(() => {

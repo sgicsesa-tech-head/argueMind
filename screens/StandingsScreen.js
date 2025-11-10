@@ -17,49 +17,51 @@ const StandingsScreen = ({ navigation, route }) => {
   const { user } = useFirebase();
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
-    loadStandings();
+    // Subscribe to real-time updates for standings with the appropriate round
+    const unsubscribe = FirebaseService.subscribeToLeaderboard(round, (users) => {
+      processStandings(users);
+      setLoading(false);
+      setRefreshing(false);
+    });
+
+    // Load the current user's profile separately
     if (user && !isAdmin) {
       loadUserProfile();
     }
-  }, [round]);
 
-  const loadStandings = async () => {
-    try {
-      const result = await FirebaseService.getAllUsers();
-      if (result.success) {
-        // Filter out admins and sort by the appropriate round score
-        const users = result.users.filter(user => !user.isAdmin);
-        
-        let sortedUsers;
-        if (round === 1) {
-          sortedUsers = users.sort((a, b) => (b.round1Score || 0) - (a.round1Score || 0));
-        } else if (round === 2) {
-          // Round 2 standings show only R2 scores for qualified users
-          sortedUsers = users
-            .filter(user => user.qualified)
-            .sort((a, b) => (b.round2Score || 0) - (a.round2Score || 0));
-        } else {
-          // Final standings - total score
-          sortedUsers = users.sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
-        }
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, [round, user, isAdmin]);
 
-        // Add rank to each user
-        const rankedUsers = sortedUsers.map((userData, index) => ({
-          ...userData,
-          rank: index + 1,
-          isCurrentUser: userData.uid === user?.uid
-        }));
-
-        setStandings(rankedUsers);
-      }
-    } catch (error) {
-      console.error('Error loading standings:', error);
-    } finally {
-      setLoading(false);
+  const processStandings = (users) => {
+    // Filter out admins and sort by the appropriate round score
+    const filteredUsers = users.filter(u => !u.isAdmin);
+    
+    let sortedUsers;
+    if (round === 1) {
+      sortedUsers = filteredUsers.sort((a, b) => (b.round1Score || 0) - (a.round1Score || 0));
+    } else if (round === 2) {
+      // Round 2 standings show only R2 scores for qualified users
+      sortedUsers = filteredUsers
+        .filter(user => user.qualified)
+        .sort((a, b) => (b.round2Score || 0) - (a.round2Score || 0));
+    } else {
+      // Final standings - total score
+      sortedUsers = filteredUsers.sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
     }
+
+    // Add rank to each user
+    const rankedUsers = sortedUsers.map((userData, index) => ({
+      ...userData,
+      rank: index + 1,
+      isCurrentUser: userData.uid === user?.uid
+    }));
+
+    setStandings(rankedUsers);
   };
 
   const loadUserProfile = async () => {
@@ -72,6 +74,21 @@ const StandingsScreen = ({ navigation, route }) => {
       } catch (error) {
         console.error('Error loading user profile:', error);
       }
+    }
+  };
+
+  const handleRefreshStandings = async () => {
+    setRefreshing(true);
+    try {
+      // Force re-fetch from Firestore
+      const result = await FirebaseService.getAllUsers();
+      if (result.success) {
+        processStandings(result.users.filter(u => !u.isAdmin));
+      }
+    } catch (error) {
+      console.error('Error refreshing standings:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -120,6 +137,17 @@ const StandingsScreen = ({ navigation, route }) => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{getStandingsTitle()}</Text>
+        {isAdmin && (
+          <TouchableOpacity 
+            style={[styles.refreshButton, refreshing && styles.refreshButtonDisabled]}
+            onPress={handleRefreshStandings}
+            disabled={refreshing}
+          >
+            <Text style={styles.refreshButtonText}>
+              {refreshing ? '🔄 Refreshing...' : '🔄 Refresh Scores'}
+            </Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -260,6 +288,25 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.h2,
     fontSize: 24,
+    marginBottom: 10,
+  },
+  refreshButton: {
+    backgroundColor: theme.success,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginBottom: 10,
+    ...shadows.small,
+  },
+  refreshButtonDisabled: {
+    backgroundColor: theme.textSecondary,
+    opacity: 0.6,
+  },
+  refreshButtonText: {
+    color: theme.textInverse,
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   content: {
     flex: 1,
@@ -322,6 +369,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: 'center',
+    paddingHorizontal: 20,
     ...shadows.small,
   },
   backButtonText: {

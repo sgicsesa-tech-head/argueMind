@@ -14,41 +14,29 @@ const firebaseConfig = {
   appId: "1:472540987727:web:5482ab663cd1c66f59c53a"
 };
 
-// Initialize Firebase (prevent multiple initializations)
-let app;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApps()[0];
-}
+// --- SINGLETON INITIALIZATION ---
+// This pattern ensures that Firebase services are initialized only once.
 
-// Initialize Firestore with settings optimized for 60+ concurrent users
-let db;
-try {
-  db = initializeFirestore(app, {
-    experimentalForceLongPolling: true, // Helps with React Native and multiple connections
-    useFetchStreams: false, // Prevents internal errors
-    ignoreUndefinedProperties: true, // Ignore undefined values
-    cacheSizeBytes: 41943040, // 40MB cache (default is 40MB, helps with multiple users)
-  });
-} catch (error) {
-  // If already initialized, just get the instance
-  console.log('⚠️ Firestore already initialized, using existing instance');
-  db = getFirestore(app);
-}
+const getFirebaseApp = () => {
+  if (getApps().length === 0) {
+    return initializeApp(firebaseConfig);
+  }
+  return getApps()[0];
+};
 
-// Initialize Auth (prevent multiple initializations)
-let auth;
-try {
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-  });
-} catch (error) {
-  // If already initialized, just get the instance
-  auth = getAuth(app);
-}
+const app = getFirebaseApp();
 
-// Export initialized services
+const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+  useFetchStreams: false,
+  ignoreUndefinedProperties: true,
+  cacheSizeBytes: 41943040, // 40MB
+});
+
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+});
+
 export { db, auth };
 
 // Initialize offline support with retry logic
