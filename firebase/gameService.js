@@ -520,7 +520,6 @@ export class FirebaseService {
       await updateDoc(userRef, {
         round1Score: totalScore,
         totalScore: newTotalScore,
-        round1Answers: answersData, // Store all answers for verification if needed
         round1Completed: true,
         lastUpdated: serverTimestamp(),
       });

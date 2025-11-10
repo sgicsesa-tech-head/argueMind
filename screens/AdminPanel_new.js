@@ -212,13 +212,11 @@ const AdminPanel = ({ navigation }) => {
       }
       
       const result = await FirebaseService.nextQuestion(2);
-      if (result.success) {
-        Alert.alert('Success', `Ready for Question ${nextQuestion} with fresh timer! Click "Show Question" when ready.`);
-      } else {
-        Alert.alert('Error', result.error || 'Failed to update question');
+      if (!result.success) {
+        console.error('Failed to update question:', result.error);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to update question');
+      console.error('Error updating question:', error);
     }
   };
 
@@ -228,9 +226,8 @@ const AdminPanel = ({ navigation }) => {
         round2QuestionActive: true,
         round2BuzzerActive: false
       });
-      Alert.alert('Question Shown', 'Question is now visible to participants');
     } catch (error) {
-      Alert.alert('Error', 'Failed to show question');
+      console.error('Failed to show question:', error);
     }
   };
 
@@ -239,9 +236,8 @@ const AdminPanel = ({ navigation }) => {
       await FirebaseService.updateGameState({
         round2BuzzerActive: true
       });
-      Alert.alert('Buzzer Active', 'Participants can now press the buzzer');
     } catch (error) {
-      Alert.alert('Error', 'Failed to activate buzzer');
+      console.error('Failed to activate buzzer:', error);
     }
   };
 
@@ -251,9 +247,8 @@ const AdminPanel = ({ navigation }) => {
       await FirebaseService.updateGameState({
         round2BuzzerActive: false
       });
-      Alert.alert('Buzzer Reset', 'Current question buzzer responses have been cleared');
     } catch (error) {
-      Alert.alert('Error', 'Failed to reset buzzer');
+      console.error('Failed to reset buzzer:', error);
     }
   };
 

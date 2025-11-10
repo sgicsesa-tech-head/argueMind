@@ -300,8 +300,7 @@ const GameScreen = ({ navigation, route }) => {
       
       const result = await FirebaseService.submitFinalRound1Score(
         user.uid,
-        localTotalScore,
-        localAnswers
+        localTotalScore
       );
 
       if (result.success) {
