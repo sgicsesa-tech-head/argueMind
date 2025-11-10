@@ -232,26 +232,47 @@ export class FirebaseService {
       timerDuration: 90,
       timeRemaining: 90,
       timerActive: false,
+      timerStartTime: null,
       round2BuzzerActive: false,
       round2QuestionActive: false,
       gameStarted: false,
       gameEnded: false
     };
     
-    return onSnapshot(gameRef, 
+    // Enhanced snapshot listener with better error handling for 60+ concurrent users
+    return onSnapshot(
+      gameRef,
+      {
+        // Include metadata changes for better sync
+        includeMetadataChanges: false,
+      },
       (snapshot) => {
-        if (snapshot.exists()) {
-          callback(snapshot.data());
-        } else {
-          // Return default state and try to create it
+        try {
+          if (snapshot.exists()) {
+            callback(snapshot.data());
+          } else {
+            // Return default state and try to create it
+            callback(defaultGameState);
+            this.createGameState().catch((error) => {
+              console.log('Could not create game state:', error.message);
+            });
+          }
+        } catch (error) {
+          console.log('Error processing game state snapshot:', error.message);
           callback(defaultGameState);
-          this.createGameState().catch(console.error);
         }
       },
       (error) => {
-        console.log('Game state listener error (offline mode):', error.message);
-        // Return default state in offline mode
+        console.log('Game state listener error:', error.message);
+        // Return default state on error (handles connection issues gracefully)
         callback(defaultGameState);
+        
+        // Don't throw error - just log it to prevent crashes with many users
+        if (error.code === 'resource-exhausted') {
+          console.error('⚠️ Firebase quota exceeded - contact admin');
+        } else if (error.code === 'permission-denied') {
+          console.error('⚠️ Permission denied - check Firebase rules');
+        }
       }
     );
   }
@@ -361,7 +382,7 @@ export class FirebaseService {
     });
   }
 
-  // Timer Management - Fixed
+  // Timer Management - Optimized for Low Firebase Usage
   static timerInterval = null;
 
   static async startTimer(duration = 90) {
@@ -369,77 +390,56 @@ export class FirebaseService {
       // Clear any existing timer
       this.stopTimer();
       
-      // Set initial timer state
+      // OPTIMIZED: Only write start time and duration to Firestore (1 write instead of 90!)
+      // Clients will calculate remaining time locally
       await this.updateGameState({
         timerActive: true,
-        timeRemaining: duration,
-        timerStartTime: serverTimestamp()
+        timerDuration: duration,
+        timerStartTime: Date.now(), // Use timestamp for client-side calculation
+        timeRemaining: duration, // Initial value for display
+        lastUpdated: serverTimestamp()
       });
 
-      // Start countdown with proper 1-second intervals
-      this.timerInterval = setInterval(async () => {
-        try {
-          const gameRef = doc(db, 'gameState', 'current');
-          const gameDoc = await getDoc(gameRef);
-          
-          if (gameDoc.exists()) {
-            const gameData = gameDoc.data();
-            const currentTime = gameData.timeRemaining || 0;
-            
-            if (currentTime > 0 && gameData.timerActive) {
-              // Decrease timer by 1 second
-              const newTime = Math.max(0, currentTime - 1);
-              
-              if (newTime === 0) {
-                // Timer finished - stop it and keep at 0
-                this.stopTimer();
-                await updateDoc(gameRef, {
-                  timerActive: false,
-                  timeRemaining: 0,
-                  lastUpdated: serverTimestamp()
-                });
-                console.log('Timer finished - staying at 0');
-              } else {
-                // Continue countdown
-                await updateDoc(gameRef, {
-                  timeRemaining: newTime,
-                  lastUpdated: serverTimestamp()
-                });
-              }
-            } else {
-              // Timer is not active or already at 0, stop the interval
-              this.stopTimer();
-            }
-          }
-        } catch (error) {
-          console.error('Timer update error:', error);
-          this.stopTimer();
-        }
-      }, 1000); // Update exactly every 1 second
-
+      console.log(`✅ Timer started: ${duration}s (optimized mode - 1 write only)`);
       return { success: true };
     } catch (error) {
+      console.error('Error starting timer:', error);
       return { success: false, error: error.message };
     }
   }
 
-  static stopTimer() {
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
+  static async stopTimer() {
+    try {
+      // OPTIMIZED: Only write when stopping (1 write instead of continuous)
+      await this.updateGameState({
+        timerActive: false,
+        timerStartTime: null,
+        lastUpdated: serverTimestamp()
+      });
+      
+      console.log('✅ Timer stopped (optimized mode)');
+      return { success: true };
+    } catch (error) {
+      console.error('Error stopping timer:', error);
+      return { success: false, error: error.message };
     }
   }
 
   static async resetTimer(duration = 90) {
     try {
-      this.stopTimer();
+      // OPTIMIZED: Only write reset state (1 write)
       await this.updateGameState({
         timerActive: false,
+        timerDuration: duration,
+        timerStartTime: null,
         timeRemaining: duration,
-        timerStartTime: null
+        lastUpdated: serverTimestamp()
       });
+      
+      console.log(`✅ Timer reset to ${duration}s (optimized mode)`);
       return { success: true };
     } catch (error) {
+      console.error('Error resetting timer:', error);
       return { success: false, error: error.message };
     }
   }
