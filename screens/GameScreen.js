@@ -34,6 +34,11 @@ const GameScreen = ({ navigation, route }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // LOCAL SCORE TRACKING - Only write to Firebase at end of round
+  const [localAnswers, setLocalAnswers] = useState({}); // { questionId: { answer, isCorrect, points, timeRemaining } }
+  const [localTotalScore, setLocalTotalScore] = useState(0);
+  const [hasSubmittedFinalScore, setHasSubmittedFinalScore] = useState(false);
+
   // Timer state - use local state for smooth countdown, sync with Firebase
   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
   const [timerActive, setTimerActive] = useState(false);
@@ -61,15 +66,23 @@ const GameScreen = ({ navigation, route }) => {
       loadCurrentQuestion();
 
       // Reset answer state when question changes
-      if (gameState.currentQuestion !== userProfile?.lastAnsweredQuestion) {
+      const currentQ = gameState.currentQuestion;
+      const hasAnsweredThis = localAnswers[currentQ];
+      
+      if (!hasAnsweredThis) {
         setUserAnswer("");
         setIsAnswered(false);
         setShowFeedback(false);
         setSubmissionResult(null);
         setLastSubmittedAnswer("");
       }
+
+      // Check if Round 1 ended - submit final score
+      if (gameState.currentRound === 2 && !hasSubmittedFinalScore && !gameState.round1Active) {
+        submitFinalRound1Score();
+      }
     }
-  }, [gameState?.currentQuestion, questionsData]);
+  }, [gameState?.currentQuestion, gameState?.currentRound, gameState?.round1Active, questionsData]);
 
   // OPTIMIZED Timer - Calculate locally from start time to reduce Firebase reads
   useEffect(() => {
@@ -193,7 +206,7 @@ const GameScreen = ({ navigation, route }) => {
     setLastSubmittedAnswer(userAnswer.toUpperCase());
 
     try {
-      // Validate answer using Firebase service
+      // Validate answer using Firebase service (only validation, no write)
       const validationResult = await FirebaseService.validateAnswer(
         currentQuestion.id,
         userAnswer.trim(),
@@ -206,63 +219,83 @@ const GameScreen = ({ navigation, route }) => {
       }
 
       const isCorrect = validationResult.isCorrect;
-
       setSubmissionResult(isCorrect ? "correct" : "incorrect");
 
-      // Submit answer to Firebase (points calculated based on ranking)
-      const result = await FirebaseService.submitAnswer(
+      if (isCorrect) {
+        // Calculate points: 90 + time remaining
+        const earnedPoints = 90 + timeLeft;
+        const questionId = gameState?.currentQuestion || 1;
+
+        // Store answer LOCALLY (no Firebase write!)
+        setLocalAnswers(prev => ({
+          ...prev,
+          [questionId]: {
+            answer: userAnswer.trim(),
+            isCorrect: true,
+            points: earnedPoints,
+            timeRemaining: timeLeft,
+            timestamp: Date.now()
+          }
+        }));
+
+        // Update local total score
+        setLocalTotalScore(prev => prev + earnedPoints);
+        setUserPoints(userPoints + earnedPoints);
+        setResultMessage(`🎉 Correct! +${earnedPoints} points (Local: ${localTotalScore + earnedPoints})`);
+        setIsAnswered(true);
+
+        // Show correct feedback for 2 seconds, then show waiting message
+        setTimeout(() => {
+          setResultMessage("Waiting for admin to move to next question...");
+          setShowFeedback(true);
+        }, 2000);
+      } else {
+        setResultMessage(
+          `❌ Incorrect! The answer was: ${validationResult.correctAnswer}`
+        );
+        setShowFeedback(true);
+        setUserAnswer(""); // Clear for retry
+
+        // Clear feedback after 3 seconds for incorrect answers
+        setTimeout(() => {
+          setResultMessage("");
+          setShowFeedback(false);
+          setSubmissionResult(null);
+          setLastSubmittedAnswer("");
+        }, 3000);
+      }
+      setShowFeedback(true);
+    } catch (error) {
+      console.error("Error submitting answer:", error);
+      Alert.alert("Error", "Failed to validate answer. Please try again.");
+    }
+  };
+
+  // Submit final Round 1 score to Firebase (SINGLE WRITE!)
+  const submitFinalRound1Score = async () => {
+    if (hasSubmittedFinalScore) return;
+
+    try {
+      console.log(`📤 Submitting final Round 1 score: ${localTotalScore} points`);
+      
+      const result = await FirebaseService.submitFinalRound1Score(
         user.uid,
-        gameState?.currentQuestion || 1,
-        userAnswer.trim(),
-        gameState?.currentRound || 1,
-        isCorrect
+        localTotalScore,
+        localAnswers
       );
 
       if (result.success) {
-        const earnedPoints = result.points || 0;
-
-        if (isCorrect) {
-          setUserPoints(userPoints + earnedPoints);
-          setResultMessage(`🎉 Correct! +${earnedPoints} points`);
-          setIsAnswered(true);
-
-          // Update local user profile
-          if (userProfile) {
-            const updatedProfile = {
-              ...userProfile,
-              round1Score: (userProfile.round1Score || 0) + earnedPoints,
-              lastAnsweredQuestion: gameState?.currentQuestion || 1,
-            };
-            setUserProfile(updatedProfile);
-          }
-
-          // Show correct feedback for 2 seconds, then show waiting message
-          setTimeout(() => {
-            setResultMessage("Waiting for admin to move to next question...");
-            setShowFeedback(true);
-          }, 2000);
-        } else {
-          setResultMessage(
-            `❌ Incorrect! The answer was: ${validationResult.correctAnswer}`
-          );
-          setShowFeedback(true);
-          setUserAnswer(""); // Clear for retry
-
-          // Clear feedback after 3 seconds for incorrect answers
-          setTimeout(() => {
-            setResultMessage("");
-            setShowFeedback(false);
-            setSubmissionResult(null);
-            setLastSubmittedAnswer("");
-          }, 3000);
-        }
-        setShowFeedback(true);
+        setHasSubmittedFinalScore(true);
+        console.log(`✅ Final score submitted successfully!`);
       } else {
-        Alert.alert("Error", "Failed to submit answer. Please try again.");
+        console.error(`❌ Failed to submit final score:`, result.error);
+        // Retry once after 2 seconds
+        setTimeout(() => submitFinalRound1Score(), 2000);
       }
     } catch (error) {
-      console.error("Error submitting answer:", error);
-      Alert.alert("Error", "Failed to submit answer. Please try again.");
+      console.error("Error submitting final score:", error);
+      // Retry once after 2 seconds
+      setTimeout(() => submitFinalRound1Score(), 2000);
     }
   };
 

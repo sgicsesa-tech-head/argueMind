@@ -470,6 +470,27 @@ export class FirebaseService {
     }
   }
 
+  // OPTIMIZED: Submit final Round 1 score (SINGLE WRITE instead of 20 writes)
+  static async submitFinalRound1Score(userId, totalScore, answersData) {
+    try {
+      const userRef = doc(db, 'users', userId);
+      
+      // Single write with all Round 1 data
+      await updateDoc(userRef, {
+        round1Score: totalScore,
+        round1Answers: answersData, // Store all answers for verification if needed
+        round1Completed: true,
+        lastUpdated: serverTimestamp()
+      });
+
+      console.log(`✅ Final Round 1 score saved: ${totalScore} points (1 write only)`);
+      return { success: true };
+    } catch (error) {
+      console.error('Error submitting final Round 1 score:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Answer Submission with Ranking-Based Points
   static async submitAnswer(userId, questionNumber, answer, roundNumber, isCorrectAnswer = false) {
     try {

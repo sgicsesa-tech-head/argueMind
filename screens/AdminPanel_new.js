@@ -189,16 +189,32 @@ const AdminPanel = ({ navigation }) => {
 
   // Round 2 Handlers
   const handleStartRound2 = async () => {
-    try {
-      const result = await FirebaseService.enableRound2();
-      if (result.success) {
-        Alert.alert('Round 2 Started', 'Qualified participants can now join Round 2 with active timer!');
-      } else {
-        Alert.alert('Error', result.error || 'Failed to start Round 2');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to start Round 2');
-    }
+    Alert.alert(
+      'Start Round 2',
+      'This will:\n1. Wait 5 seconds for final scores\n2. Calculate rankings\n3. Qualify top 10-15 teams\n\nProceed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Start Round 2',
+          onPress: async () => {
+            try {
+              // Wait 5 seconds for all users to submit final scores
+              Alert.alert('Please Wait', 'Waiting for final scores... (5 seconds)');
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              
+              const result = await FirebaseService.enableRound2();
+              if (result.success) {
+                Alert.alert('Round 2 Started', 'Qualified participants can now join Round 2!');
+              } else {
+                Alert.alert('Error', result.error || 'Failed to start Round 2');
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to start Round 2');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleRound2NextQuestion = async () => {
