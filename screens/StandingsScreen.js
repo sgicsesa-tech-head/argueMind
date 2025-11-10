@@ -80,10 +80,21 @@ const StandingsScreen = ({ navigation, route }) => {
   const handleRefreshStandings = async () => {
     setRefreshing(true);
     try {
-      // Force re-fetch from Firestore
+      // Force re-fetch from Firestore and update qualifications
       const result = await FirebaseService.getAllUsers();
       if (result.success) {
-        processStandings(result.users.filter(u => !u.isAdmin));
+        const nonAdminUsers = result.users.filter(u => !u.isAdmin);
+        
+        // If this is Round 1 standings, calculate and update qualifications
+        if (round === 1 && isAdmin) {
+          await FirebaseService.updateQualificationsBasedOnRound1Scores(nonAdminUsers);
+        }
+        
+        // Fetch updated data after qualification update
+        const updatedResult = await FirebaseService.getAllUsers();
+        if (updatedResult.success) {
+          processStandings(updatedResult.users.filter(u => !u.isAdmin));
+        }
       }
     } catch (error) {
       console.error('Error refreshing standings:', error);

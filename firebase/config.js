@@ -26,11 +26,14 @@ const getFirebaseApp = () => {
 
 const app = getFirebaseApp();
 
+// Enhanced Firestore settings for Samsung and Android devices
+// This helps prevent "INTERNAL ASSERTION FAILED: Unexpected state" errors
 const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-  useFetchStreams: false,
+  experimentalForceLongPolling: true, // Use long-polling for better Android compatibility
+  useFetchStreams: false, // Disable fetch streams (problematic on some Android devices)
   ignoreUndefinedProperties: true,
   cacheSizeBytes: 41943040, // 40MB
+  experimentalAutoDetectLongPolling: false, // Disable auto-detection, force long polling
 });
 
 const auth = initializeAuth(app, {

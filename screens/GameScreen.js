@@ -61,7 +61,9 @@ const GameScreen = ({ navigation, route }) => {
 
   // Listen to game state changes for question updates
   useEffect(() => {
-    if (gameState && questionsData) {
+    let isMounted = true;
+
+    if (gameState && questionsData && isMounted) {
       // Load current question when game state or questions data changes
       loadCurrentQuestion();
 
@@ -69,7 +71,7 @@ const GameScreen = ({ navigation, route }) => {
       const currentQ = gameState.currentQuestion;
       const hasAnsweredThis = localAnswers[currentQ];
       
-      if (!hasAnsweredThis) {
+      if (!hasAnsweredThis && isMounted) {
         setUserAnswer("");
         setIsAnswered(false);
         setShowFeedback(false);
@@ -78,22 +80,22 @@ const GameScreen = ({ navigation, route }) => {
       }
 
       // Check if Round 1 ended - submit final score
-      if (gameState.currentRound === 2 && !hasSubmittedFinalScore && !gameState.round1Active) {
+      if (gameState.currentRound === 2 && !hasSubmittedFinalScore && !gameState.round1Active && isMounted) {
         submitFinalRound1Score();
       }
     }
 
-    // Cleanup function to prevent memory leaks and unexpected behavior
+    // Cleanup function to prevent memory leaks on Samsung devices
     return () => {
-      // This is a good place to detach any listeners if they were attached directly in this component
-      // For now, we'll just log that the component is unmounting or re-rendering
-      console.log("GameScreen effect cleanup for gameState changes.");
+      isMounted = false;
+      console.log("GameScreen effect cleanup - preventing state updates after unmount");
     };
   }, [gameState?.currentQuestion, gameState?.currentRound, gameState?.round1Active, questionsData, hasSubmittedFinalScore]);
 
   // OPTIMIZED Timer - Calculate locally from start time to reduce Firebase reads
   useEffect(() => {
-    let interval;
+    let interval = null;
+    let isMounted = true;
 
     if (gameState?.timerActive && gameState?.timerStartTime) {
       // Calculate time remaining based on start time (client-side calculation)
@@ -105,27 +107,38 @@ const GameScreen = ({ navigation, route }) => {
 
       // Update local time every second
       interval = setInterval(() => {
+        if (!isMounted) return;
+        
         const remaining = calculateTimeRemaining();
         setTimeLeft(remaining);
         
         if (remaining <= 0) {
           setTimerActive(false);
-          clearInterval(interval);
+          if (interval) {
+            clearInterval(interval);
+            interval = null;
+          }
         }
       }, 1000);
 
       // Set initial value immediately
-      setTimeLeft(calculateTimeRemaining());
-      setTimerActive(true);
+      if (isMounted) {
+        setTimeLeft(calculateTimeRemaining());
+        setTimerActive(true);
+      }
     } else {
       // Timer not active - use Firebase value or default
-      setTimeLeft(gameState?.timeRemaining || 90);
-      setTimerActive(false);
+      if (isMounted) {
+        setTimeLeft(gameState?.timeRemaining || 90);
+        setTimerActive(false);
+      }
     }
 
     return () => {
+      isMounted = false;
       if (interval) {
         clearInterval(interval);
+        interval = null;
       }
     };
   }, [gameState?.timerActive, gameState?.timerStartTime, gameState?.currentQuestion]);
@@ -416,15 +429,6 @@ const GameScreen = ({ navigation, route }) => {
 
       {/* Game Content */}
       <View style={styles.gameContent}>
-        {/* Image Display */}
-        <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: currentQuestionData.imageUrl }}
-            style={styles.gameImage}
-            resizeMode="contain"
-          />
-        </View>
-
         {/* Interactive Word Display */}
         <View style={styles.wordContainer}>
           <View style={styles.interactiveWordContainer}>

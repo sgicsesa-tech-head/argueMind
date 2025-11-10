@@ -19,10 +19,27 @@ const DashboardScreen = ({ navigation }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Real-time listener for user profile (updates when qualified flag changes)
   useEffect(() => {
-    console.log('DashboardScreen: useEffect triggered, user:', user ? 'exists' : 'null');
-    console.log('DashboardScreen: gameState:', gameState);
-    loadUserProfile();
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    console.log('DashboardScreen: Setting up real-time profile listener for user:', user.uid);
+    
+    // Subscribe to real-time updates
+    const unsubscribe = FirebaseService.subscribeToUser(user.uid, (data) => {
+      console.log('Profile updated via listener:', data);
+      setUserProfile(data);
+      setLoading(false);
+    });
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [user]);
 
   const loadUserProfile = async () => {

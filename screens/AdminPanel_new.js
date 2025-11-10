@@ -132,35 +132,21 @@ const AdminPanel = ({ navigation }) => {
     }
   };
 
-  const handleRound1NextQuestion = () => {
+  const handleRound1NextQuestion = async () => {
     const nextQuestion = (gameState?.currentQuestion || 1) + 1;
     if (nextQuestion > 20) {
       Alert.alert('Round Complete', 'Round 1 is finished!');
       return;
     }
     
-    Alert.alert(
-      'Next Question',
-      `Move all participants to Question ${nextQuestion} with fresh timer?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Continue', 
-          onPress: async () => {
-            try {
-              const result = await FirebaseService.nextQuestion(1);
-              if (result.success) {
-                Alert.alert('Success', `All participants moved to Question ${nextQuestion} with 90-second timer!`);
-              } else {
-                Alert.alert('Error', result.error || 'Failed to update question');
-              }
-            } catch (error) {
-              Alert.alert('Error', 'Failed to update question');
-            }
-          }
-        }
-      ]
-    );
+    try {
+      const result = await FirebaseService.nextQuestion(1);
+      if (!result.success) {
+        console.error('Failed to update question:', result.error);
+      }
+    } catch (error) {
+      console.error('Error updating question:', error);
+    }
   };
 
   const handleEndRound1 = () => {
@@ -547,9 +533,8 @@ const AdminPanel = ({ navigation }) => {
                       onPress={async () => {
                         try {
                           await FirebaseService.startTimer(90);
-                          Alert.alert('Timer Started', '90-second timer started for all participants');
                         } catch (error) {
-                          Alert.alert('Error', 'Failed to start timer');
+                          console.error('Failed to start timer:', error);
                         }
                       }}
                     >
@@ -562,9 +547,8 @@ const AdminPanel = ({ navigation }) => {
                         try {
                           await FirebaseService.stopTimer();
                           await FirebaseService.updateGameState({ timerActive: false });
-                          Alert.alert('Timer Stopped', 'Timer stopped for all participants');
                         } catch (error) {
-                          Alert.alert('Error', 'Failed to stop timer');
+                          console.error('Failed to stop timer:', error);
                         }
                       }}
                     >
@@ -576,9 +560,8 @@ const AdminPanel = ({ navigation }) => {
                     onPress={async () => {
                       try {
                         await FirebaseService.resetTimer(90);
-                        Alert.alert('Timer Reset', 'Timer reset to 90 seconds for all participants');
                       } catch (error) {
-                        Alert.alert('Error', 'Failed to reset timer');
+                        console.error('Failed to reset timer:', error);
                       }
                     }}
                   >

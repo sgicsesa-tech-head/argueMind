@@ -737,6 +737,40 @@ export class FirebaseService {
     }
   }
 
+  // Update qualifications based on Round 1 scores (called when admin refreshes standings)
+  static async updateQualificationsBasedOnRound1Scores(users) {
+    try {
+      // Sort users by round1Score in descending order
+      const sortedUsers = [...users].sort((a, b) => (b.round1Score || 0) - (a.round1Score || 0));
+
+      // Get qualified count from game state
+      const gameStateDoc = await getDoc(doc(db, "gameState", "current"));
+      const qualifiedCount = gameStateDoc.exists()
+        ? Math.min(gameStateDoc.data().qualifiedCount || 10, 15)
+        : 10;
+
+      // Update each user's qualification status
+      for (let i = 0; i < sortedUsers.length; i++) {
+        const user = sortedUsers[i];
+        const rank = i + 1;
+        const isQualified = rank <= qualifiedCount && (user.round1Score || 0) > 0;
+
+        // Update user document with qualification flag
+        await updateDoc(doc(db, "users", user.uid), {
+          round1Rank: rank,
+          qualified: isQualified,
+          lastUpdated: serverTimestamp(),
+        });
+      }
+
+      console.log(`✅ Updated qualifications: Top ${qualifiedCount} users qualified for Round 2`);
+      return { success: true, qualifiedCount };
+    } catch (error) {
+      console.error('Error updating qualifications:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Get user data
   static async getUserData(userId) {
     try {
