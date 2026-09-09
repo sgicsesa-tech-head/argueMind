@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { theme, shadows, typography } from '../theme';
 import { FirebaseService } from '../firebase/gameService';
 import { useFirebase } from '../hooks/useFirebase';
@@ -385,7 +386,10 @@ const AdminPanel = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Admin Panel2</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Ionicons name="shield-checkmark" size={20} color={theme.primary} style={{ marginRight: 8 }} />
+          <Text style={styles.headerTitle}>CSE Induction Admin</Text>
+        </View>
         <View style={styles.headerButtons}>
           <TouchableOpacity 
             style={[styles.resetGameButton, resettingRound && styles.disabledButton]}
@@ -475,7 +479,8 @@ const AdminPanel = ({ navigation }) => {
                   style={styles.standingsButton}
                   onPress={() => navigation.navigate('Standings', { round: 1, isAdmin: true })}
                 >
-                  <Text style={styles.standingsButtonText}>📊 View Round 1 Standings</Text>
+                  <Ionicons name="podium-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.standingsButtonText}>View Round 1 Standings</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -651,7 +656,8 @@ const AdminPanel = ({ navigation }) => {
                   style={styles.standingsButton}
                   onPress={() => navigation.navigate('Standings', { round: 2, isAdmin: true })}
                 >
-                  <Text style={styles.standingsButtonText}>📊 View Round 2 Standings</Text>
+                  <Ionicons name="podium-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.standingsButtonText}>View Round 2 Standings</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -668,8 +674,8 @@ const AdminPanel = ({ navigation }) => {
                   <View style={styles.noResponsesContainer}>
                     <Text style={styles.noResponsesText}>
                       {gameState?.round2BuzzerActive 
-                        ? '⏳ Waiting for teams to buzz in...' 
-                        : '🔔 Activate buzzer to start receiving responses'}
+                        ? 'Waiting for teams to buzz in...' 
+                        : 'Activate buzzer to start receiving responses'}
                     </Text>
                   </View>
                 ) : (
@@ -1026,10 +1032,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
     marginTop: 10,
-    borderWidth: 2,
-    borderColor: theme.primary,
-    ...shadows.medium,
+    borderWidth: 1,
+    borderColor: theme.border,
+    ...shadows.small,
   },
   standingsButtonText: {
     color: theme.textPrimary,

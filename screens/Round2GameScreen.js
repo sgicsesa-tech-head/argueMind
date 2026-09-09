@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { theme, shadows, typography } from '../theme';
 import { FirebaseService } from '../firebase/gameService';
 import { useFirebase } from '../hooks/useFirebase';
@@ -131,35 +132,47 @@ const Round2GameScreen = ({ navigation, route }) => {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Round 2 - Buzzer Round</Text>
-        <Text style={styles.questionCounter}>
-          Question {gameState?.currentQuestion || 1}/{gameState?.round2TotalQuestions || 15}
-        </Text>
+        <TouchableOpacity
+          style={styles.headerNavButton}
+          onPress={handleBackToDashboard}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
+        </TouchableOpacity>
+
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>CSE Induction</Text>
+          <Text style={styles.questionCounter}>
+            Round 2 • Question {gameState?.currentQuestion || 1} of {gameState?.round2TotalQuestions || 15}
+          </Text>
+        </View>
+
+        <View style={styles.headerPlaceholder} />
       </View>
       
       {/* Points Display */}
-      <View style={styles.pointsContainer}>
-        <Text style={styles.pointsText}>
-          Round 2 Points: {userProfile?.round2Score || 0}
-        </Text>
-        <Text style={styles.qualifiedText}>
-          Total: {userProfile?.totalScore || 0}
-        </Text>
+      <View style={styles.pointsBar}>
+        <View style={styles.pointsBadge}>
+          <Ionicons name="flash" size={14} color={theme.warning} style={{ marginRight: 6 }} />
+          <Text style={styles.pointsText}>
+            R2 Score: {userProfile?.round2Score || 0} pts
+          </Text>
+        </View>
       </View>
       
       {/* Question Display */}
       <View style={styles.questionContainer}>
         <Text style={styles.questionTitle}>
-          Question {gameState?.currentQuestion || 1}
+          Buzzer Question {gameState?.currentQuestion || 1}
         </Text>
         {gameState?.round2QuestionActive ? (
           <Text style={styles.questionInstruction}>
-            Listen carefully to the verbal question.{'\n'}
-            Press the buzzer when you know the answer!
+            Listen closely to the speaker.{'\n'}
+            Hit the buzzer as fast as possible when active!
           </Text>
         ) : (
           <Text style={styles.questionInstructionWaiting}>
-            Waiting for admin to show the question...
+            Waiting for host to present the question...
           </Text>
         )}
       </View>
@@ -173,17 +186,26 @@ const Round2GameScreen = ({ navigation, route }) => {
           ]}
           onPress={handleBuzzer}
           disabled={!gameState?.round2BuzzerActive || hasBuzzed}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
+          <Ionicons
+            name={hasBuzzed ? "checkmark-circle" : "flash"}
+            size={40}
+            color={theme.textPrimary}
+            style={{ marginBottom: 4 }}
+          />
           <Text style={styles.buzzerButtonText}>
             {getBuzzerButtonText()}
           </Text>
         </TouchableOpacity>
         
         {buzzerTime && (
-          <Text style={styles.responseTimeText}>
-            Your response time: {buzzerTime}ms
-          </Text>
+          <View style={styles.responseTimeBadge}>
+            <Ionicons name="speedometer-outline" size={14} color={theme.accent} style={{ marginRight: 6 }} />
+            <Text style={styles.responseTimeText}>
+              Response: {buzzerTime} ms
+            </Text>
+          </View>
         )}
       </View>
 
@@ -191,25 +213,28 @@ const Round2GameScreen = ({ navigation, route }) => {
       <View style={styles.statusContainer}>
         {!gameState?.round2QuestionActive && (
           <Text style={styles.statusText}>
-            Waiting for admin to show question...
+            Waiting for host to begin question...
           </Text>
         )}
         
         {gameState?.round2QuestionActive && !gameState?.round2BuzzerActive && !hasBuzzed && (
           <Text style={styles.statusText}>
-            Question shown - Waiting for buzzer activation...
+            Question active — Get ready for buzzer unlock...
           </Text>
         )}
         
         {gameState?.round2BuzzerActive && !hasBuzzed && (
-          <Text style={styles.statusTextActive}>
-            🔴 BUZZER ACTIVE - Press to answer!
-          </Text>
+          <View style={styles.activeStatusRow}>
+            <Ionicons name="flash" size={18} color={theme.warning} style={{ marginRight: 6 }} />
+            <Text style={styles.statusTextActive}>
+              BUZZER UNLOCKED — Hit to answer!
+            </Text>
+          </View>
         )}
         
         {hasBuzzed && (
           <Text style={styles.statusText}>
-            Waiting for admin scoring...
+            Buzzed in! Waiting for host evaluation...
           </Text>
         )}
       </View>
@@ -220,15 +245,15 @@ const Round2GameScreen = ({ navigation, route }) => {
           <Text style={styles.rankingsTitle}>Buzzer Order:</Text>
           {buzzerRankings.map((ranking, index) => (
             <View 
-              key={ranking.id} 
+              key={ranking.id || index} 
               style={[
                 styles.rankingItem,
                 ranking.userId === user?.uid && styles.currentUserRanking
               ]}
             >
-              <Text style={styles.rankingPosition}>{index + 1}.</Text>
-              <Text style={styles.rankingName}>
-                {ranking.userId === user?.uid ? 'You' : `Team ${index + 1}`}
+              <Text style={styles.rankingPosition}>#{index + 1}</Text>
+              <Text style={styles.rankingName} numberOfLines={1}>
+                {ranking.userId === user?.uid ? 'You' : (ranking.teamName || `Team ${index + 1}`)}
               </Text>
               <Text style={styles.rankingTime}>{ranking.responseTime}ms</Text>
               {ranking.scored && (
@@ -271,35 +296,74 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: theme.surface,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  headerNavButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: theme.surfaceElevated,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  headerCenter: {
+    alignItems: "center",
+  },
+  headerPlaceholder: {
+    width: 36,
   },
   headerTitle: {
-    ...typography.h3,
+    fontSize: 16,
+    fontWeight: "700",
+    color: theme.textPrimary,
   },
   questionCounter: {
-    ...typography.caption,
-    marginTop: 5,
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginTop: 2,
   },
-  pointsContainer: {
-    backgroundColor: theme.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  pointsBar: {
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  pointsBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   pointsText: {
     color: theme.textPrimary,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  qualifiedText: {
-    color: theme.textPrimary,
     fontSize: 14,
+    fontWeight: "600",
+  },
+  responseTimeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.surfaceElevated,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  activeStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
   questionContainer: {
     padding: 20,
