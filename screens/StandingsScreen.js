@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { theme, shadows, typography } from '../theme';
 import { FirebaseService } from '../firebase/gameService';
 import { useFirebase } from '../hooks/useFirebase';
@@ -62,13 +63,10 @@ const StandingsScreen = ({ navigation, route }) => {
   const handleRefreshStandings = async () => {
     setRefreshing(true);
     try {
-      // Force re-fetch from Firestore (NO auto-qualification - admin manages manually)
       const result = await FirebaseService.getAllUsers();
       if (result.success) {
         const nonAdminUsers = result.users.filter(u => !u.isAdmin);
         processStandings(nonAdminUsers);
-        
-        console.log('✅ Standings refreshed (qualifications preserved - admin controlled)');
       }
     } catch (error) {
       console.error('Error refreshing standings:', error);
@@ -77,33 +75,28 @@ const StandingsScreen = ({ navigation, route }) => {
     }
   };
 
-  const getRankColor = (rank) => {
-    switch (rank) {
-      case 1: return '#f1c40f'; // Gold
-      case 2: return '#95a5a6'; // Silver
-      case 3: return '#cd7f32'; // Bronze
-      default: return '#7f8c8d';
+  const renderRankBadge = (rank) => {
+    if (rank === 1) {
+      return <Ionicons name="trophy" size={22} color="#f59e0b" />;
     }
-  };
-
-  const getRankIcon = (rank) => {
-    switch (rank) {
-      case 1: return '🥇';
-      case 2: return '🥈';
-      case 3: return '🥉';
-      default: return `${rank}`;
+    if (rank === 2) {
+      return <Ionicons name="medal" size={22} color="#94a3b8" />;
     }
+    if (rank === 3) {
+      return <Ionicons name="medal" size={22} color="#d97706" />;
+    }
+    return <Text style={styles.rankNumberText}>#{rank}</Text>;
   };
 
   const getScoreToShow = (player) => {
     if (round === 1) return player.round1Score || 0;
-    if (round === 2) return player.round2Score || 0; // Only R2 score
+    if (round === 2) return player.round2Score || 0;
     return player.totalScore || 0;
   };
 
   const getStandingsTitle = () => {
-    if (round === 1) return 'Round 1 Standings';
-    if (round === 2) return 'Round 2 Standings';
+    if (round === 1) return 'Round 1 Leaderboard';
+    if (round === 2) return 'Round 2 Leaderboard';
     return 'Final Standings';
   };
 
@@ -120,81 +113,100 @@ const StandingsScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{getStandingsTitle()}</Text>
-        {isAdmin && (
+        <TouchableOpacity 
+          style={styles.navButton}
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={20} color={theme.textPrimary} />
+        </TouchableOpacity>
+
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>CSE Induction</Text>
+          <Text style={styles.headerSubtitle}>{getStandingsTitle()}</Text>
+        </View>
+
+        {isAdmin ? (
           <TouchableOpacity 
-            style={[styles.refreshButton, refreshing && styles.refreshButtonDisabled]}
+            style={[styles.refreshIconBtn, refreshing && { opacity: 0.5 }]}
             onPress={handleRefreshStandings}
             disabled={refreshing}
           >
-            <Text style={styles.refreshButtonText}>
-              {refreshing ? '🔄 Refreshing...' : '🔄 Refresh Scores'}
-            </Text>
+            <Ionicons name="refresh" size={20} color={theme.primary} />
           </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
         )}
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* User's Current Position (if not admin) */}
         {!isAdmin && userProfile && (
           <View style={styles.userStatsContainer}>
-            <Text style={styles.userStatsTitle}>Your Performance</Text>
-            <View style={styles.userStatsRow}>
-              <Text style={styles.userStatsLabel}>Current Rank:</Text>
-              <Text style={styles.userStatsValue}>
-                #{standings.find(s => s.uid === user.uid)?.rank || 'N/A'}
-              </Text>
+            <View style={styles.userStatsHeader}>
+              <Ionicons name="person" size={16} color={theme.primary} style={{ marginRight: 8 }} />
+              <Text style={styles.userStatsTitle}>Your Standing</Text>
             </View>
-            <View style={styles.userStatsRow}>
-              <Text style={styles.userStatsLabel}>Points:</Text>
-              <Text style={styles.userStatsValue}>{getScoreToShow(userProfile)}</Text>
+            <View style={styles.statsGrid}>
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>Current Rank</Text>
+                <Text style={styles.statValue}>
+                  #{standings.find(s => s.uid === user?.uid)?.rank || '—'}
+                </Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>Total Points</Text>
+                <Text style={[styles.statValue, { color: theme.accent }]}>
+                  {getScoreToShow(userProfile)}
+                </Text>
+              </View>
             </View>
           </View>
         )}
 
         <View style={styles.standingsContainer}>
-          {standings.length > 0 ? standings.map((player) => (
-            <View 
-              key={player.rank} 
-              style={[
-                styles.playerRow,
-                player.isCurrentUser && styles.currentUserRow
-              ]}
-            >
-              <View style={styles.rankContainer}>
-                <Text style={[styles.rankText, { color: getRankColor(player.rank) }]}>
-                  {getRankIcon(player.rank)}
-                </Text>
+          {standings.length > 0 ? (
+            standings.map((player) => (
+              <View 
+                key={player.uid || player.rank} 
+                style={[
+                  styles.playerRow,
+                  player.isCurrentUser && styles.currentUserRow
+                ]}
+              >
+                <View style={styles.rankContainer}>
+                  {renderRankBadge(player.rank)}
+                </View>
+                
+                <View style={styles.playerInfo}>
+                  <Text 
+                    style={[
+                      styles.playerName,
+                      player.isCurrentUser && styles.currentUserText
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {player.teamName || 'Team'}
+                  </Text>
+                  {player.isCurrentUser && (
+                    <Text style={styles.currentUserBadge}>YOU</Text>
+                  )}
+                </View>
+                
+                <View style={styles.pointsContainer}>
+                  <Text style={styles.playerPoints}>
+                    {getScoreToShow(player)}
+                  </Text>
+                  <Text style={styles.pointsUnit}>pts</Text>
+                </View>
               </View>
-              
-              <View style={styles.playerInfo}>
-                <Text style={[
-                  styles.playerName,
-                  player.isCurrentUser && styles.currentUserText
-                ]}>
-                  {player.teamName || 'Anonymous'}
-                </Text>
-              </View>
-              
-              <View style={styles.pointsContainer}>
-                <Text style={[
-                  styles.playerPoints,
-                  player.isCurrentUser && styles.currentUserText
-                ]}>
-                  {getScoreToShow(player)} pts
-                </Text>
-              </View>
-            </View>
-          )) : (
+            ))
+          ) : (
             <View style={styles.noDataContainer}>
-              <Text style={styles.noDataText}>No standings data available</Text>
+              <Ionicons name="podium-outline" size={48} color={theme.textMuted} style={{ marginBottom: 12 }} />
+              <Text style={styles.noDataText}>No standings data available yet</Text>
             </View>
           )}
         </View>
@@ -205,7 +217,8 @@ const StandingsScreen = ({ navigation, route }) => {
           style={styles.backButton}
           onPress={() => navigation.navigate('Dashboard')}
         >
-          <Text style={styles.backButtonText}>Back to Dashboard</Text>
+          <Ionicons name="home-outline" size={18} color={theme.textPrimary} style={{ marginRight: 8 }} />
+          <Text style={styles.backButtonText}>Back to Hub</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -229,138 +242,197 @@ const styles = StyleSheet.create({
   },
   userStatsContainer: {
     backgroundColor: theme.surface,
-    borderRadius: 12,
-    padding: 20,
-    margin: 20,
+    borderRadius: 16,
+    padding: 18,
+    marginVertical: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
     ...shadows.medium,
   },
-  userStatsTitle: {
-    ...typography.h3,
-    marginBottom: 15,
-    textAlign: 'center',
+  userStatsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  userStatsRow: {
+  userStatsTitle: {
+    ...typography.caption,
+    color: theme.textSecondary,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginVertical: 5,
+    gap: 12,
   },
-  userStatsLabel: {
-    ...typography.body,
-    color: theme.textSecondary,
+  statBox: {
+    flex: 1,
+    backgroundColor: theme.surfaceElevated,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
-  userStatsValue: {
-    ...typography.body,
-    fontWeight: 'bold',
-    color: theme.primary,
+  statLabel: {
+    ...typography.small,
+    color: theme.textMuted,
+    marginBottom: 4,
+  },
+  statValue: {
+    ...typography.h3,
+    color: theme.textPrimary,
   },
   noDataContainer: {
-    padding: 40,
+    padding: 60,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   noDataText: {
     ...typography.body,
-    color: theme.textSecondary,
-    fontStyle: 'italic',
+    color: theme.textMuted,
   },
   header: {
     backgroundColor: theme.surface,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  navButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: theme.surfaceElevated,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  headerTitleContainer: {
     alignItems: 'center',
   },
   headerTitle: {
-    ...typography.h2,
-    fontSize: 24,
-    marginBottom: 10,
+    ...typography.h3,
+    fontSize: 17,
   },
-  refreshButton: {
-    backgroundColor: theme.success,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    marginBottom: 10,
-    ...shadows.small,
+  headerSubtitle: {
+    ...typography.caption,
+    color: theme.primary,
+    marginTop: 2,
+    fontWeight: '600',
   },
-  refreshButtonDisabled: {
-    backgroundColor: theme.textSecondary,
-    opacity: 0.6,
-  },
-  refreshButtonText: {
-    color: theme.textInverse,
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
+  refreshIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: theme.surfaceElevated,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   standingsContainer: {
-    marginTop: 20,
+    marginTop: 10,
+    paddingBottom: 20,
   },
   playerRow: {
     backgroundColor: theme.surface,
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.border,
     ...shadows.small,
   },
   currentUserRow: {
     backgroundColor: theme.surfaceElevated,
-    borderWidth: 2,
     borderColor: theme.primary,
+    borderWidth: 1.5,
   },
   rankContainer: {
-    width: 50,
+    width: 36,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  rankText: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  rankNumberText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: theme.textMuted,
+    fontSize: 14,
   },
   playerInfo: {
     flex: 1,
-    marginLeft: 15,
+    marginLeft: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   playerName: {
-    fontSize: 18,
+    ...typography.body,
     fontWeight: '600',
     color: theme.textPrimary,
   },
+  currentUserBadge: {
+    marginLeft: 8,
+    backgroundColor: theme.primary,
+    color: theme.textPrimary,
+    fontSize: 10,
+    fontWeight: '800',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
   currentUserText: {
-    color: theme.primary,
-    fontWeight: 'bold',
+    color: theme.textPrimary,
+    fontWeight: '700',
   },
   pointsContainer: {
     alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 4,
   },
   playerPoints: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: theme.success,
+    ...typography.body,
+    fontWeight: '700',
+    color: theme.textPrimary,
+  },
+  pointsUnit: {
+    ...typography.small,
+    color: theme.textMuted,
+    marginBottom: 1,
   },
   footer: {
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: theme.surface,
     borderTopWidth: 1,
     borderTopColor: theme.border,
   },
   backButton: {
-    backgroundColor: theme.primary,
+    backgroundColor: theme.surfaceElevated,
     borderRadius: 12,
-    paddingVertical: 15,
+    paddingVertical: 13,
     alignItems: 'center',
-    paddingHorizontal: 20,
-    ...shadows.small,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   backButtonText: {
-    color: theme.textInverse,
-    fontSize: 18,
-    fontWeight: 'bold',
+    color: theme.textPrimary,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
 

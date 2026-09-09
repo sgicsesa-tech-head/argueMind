@@ -989,7 +989,6 @@ export class FirebaseService {
           success: true,
           isCorrect,
           points,
-          correctAnswer: question.word,
           difficulty: question.difficulty,
         };
       }

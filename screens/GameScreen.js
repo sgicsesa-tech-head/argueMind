@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { theme, shadows, typography } from "../theme";
 import { FirebaseService } from "../firebase/gameService";
 import { useFirebase } from "../hooks/useFirebase";
@@ -248,28 +249,26 @@ const GameScreen = ({ navigation, route }) => {
         // Update local total score
         setLocalTotalScore(prev => prev + earnedPoints);
         setUserPoints(userPoints + earnedPoints);
-        setResultMessage(`🎉 Correct! +${earnedPoints} points (Local: ${localTotalScore + earnedPoints})`);
+        setResultMessage(`Correct! +${earnedPoints} pts`);
         setIsAnswered(true);
 
         // Show correct feedback for 2 seconds, then show waiting message
         setTimeout(() => {
-          setResultMessage("Waiting for admin to move to next question...");
+          setResultMessage("Waiting for host to move to next question...");
           setShowFeedback(true);
         }, 2000);
       } else {
-        setResultMessage(
-          `❌ Incorrect! The answer was: ${validationResult.correctAnswer}`
-        );
+        setResultMessage("Incorrect answer. Try again!");
         setShowFeedback(true);
         setUserAnswer(""); // Clear for retry
 
-        // Clear feedback after 3 seconds for incorrect answers
+        // Clear feedback after 2.5 seconds for incorrect answers
         setTimeout(() => {
           setResultMessage("");
           setShowFeedback(false);
           setSubmissionResult(null);
           setLastSubmittedAnswer("");
-        }, 3000);
+        }, 2500);
       }
       setShowFeedback(true);
     } catch (error) {
@@ -368,15 +367,16 @@ const GameScreen = ({ navigation, route }) => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.waitingContainer}>
+          <Ionicons name="time-outline" size={48} color={theme.textSecondary} style={{ marginBottom: 16 }} />
           <Text style={styles.waitingTitle}>Round 1 Not Active</Text>
           <Text style={styles.waitingText}>
-            Please wait for the admin to start Round 1
+            Please wait for the host to start Round 1.
           </Text>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.navigate("Dashboard")}
           >
-            <Text style={styles.backButtonText}>Back to Dashboard</Text>
+            <Text style={styles.backButtonText}>Return to Dashboard</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -389,28 +389,35 @@ const GameScreen = ({ navigation, route }) => {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Round {roundNumber}</Text>
-        <Text style={styles.questionCounter}>
-          Question {gameState?.currentQuestion || 1}/
-          {gameState?.round1TotalQuestions || 20}
-        </Text>
+        <TouchableOpacity
+          style={styles.headerNavButton}
+          onPress={() => navigation.navigate("Dashboard")}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
+        </TouchableOpacity>
+
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>CSE Induction</Text>
+          <Text style={styles.questionCounter}>
+            Question {gameState?.currentQuestion || 1} of {gameState?.round1TotalQuestions || 20}
+          </Text>
+        </View>
+
         <View style={styles.timerContainer}>
+          <Ionicons name="time-outline" size={16} color={getTimerColor()} style={{ marginRight: 4 }} />
           <Text style={[styles.timer, { color: getTimerColor() }]}>
             {formatTime(timeLeft)}
-          </Text>
-          <Text style={styles.timerSubtext}>
-            {timerActive
-              ? "Timer Active"
-              : timeLeft === 0
-              ? "Time Up!"
-              : "Timer Stopped"}
           </Text>
         </View>
       </View>
 
       {/* Points Display */}
-      <View style={styles.pointsContainer}>
-        <Text style={styles.pointsText}>Points: {userPoints}</Text>
+      <View style={styles.pointsBar}>
+        <View style={styles.pointsBadge}>
+          <Ionicons name="star" size={14} color={theme.warning} style={{ marginRight: 6 }} />
+          <Text style={styles.pointsText}>{userPoints} pts</Text>
+        </View>
       </View>
 
       {/* Game Content */}
@@ -487,15 +494,21 @@ const GameScreen = ({ navigation, route }) => {
               <View
                 style={[
                   styles.feedbackContainer,
-                  isAnswered &&
-                    !showFeedback &&
-                    styles.correctFeedbackContainer,
+                  isAnswered
+                    ? styles.correctFeedbackContainer
+                    : styles.incorrectFeedbackContainer,
                 ]}
               >
+                <Ionicons
+                  name={isAnswered || resultMessage.includes("Correct") ? "checkmark-circle" : "close-circle"}
+                  size={18}
+                  color={isAnswered || resultMessage.includes("Correct") ? theme.success : theme.error}
+                  style={{ marginRight: 8 }}
+                />
                 <Text
                   style={[
                     styles.feedbackText,
-                    resultMessage.includes("Correct")
+                    isAnswered || resultMessage.includes("Correct")
                       ? styles.correctText
                       : styles.incorrectText,
                   ]}
@@ -508,25 +521,18 @@ const GameScreen = ({ navigation, route }) => {
         ) : (
           /* Result Display for correct answers - waiting state */
           <View style={styles.resultContainer}>
-            <Text
-              style={[
-                styles.resultText,
-                resultMessage.includes("Correct")
-                  ? styles.correctText
-                  : styles.incorrectText,
-              ]}
-            >
-              {resultMessage}
-            </Text>
+            <View style={styles.resultRow}>
+              <Ionicons name="checkmark-circle" size={22} color={theme.success} style={{ marginRight: 8 }} />
+              <Text style={styles.resultText}>{resultMessage}</Text>
+            </View>
             <Text style={styles.waitingText}>Waiting for next question...</Text>
           </View>
         )}
       </View>
 
-
       <View style={styles.adminInfo}>
         <Text style={styles.adminInfoText}>
-          Timer runs universally for all players • Controlled by admin
+          CSE Induction • Synchronized live session
         </Text>
       </View>
     </SafeAreaView>
@@ -578,43 +584,69 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: theme.surface,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  headerTitle: {
-    ...typography.h3,
-  },
-  questionCounter: {
-    ...typography.caption,
-  },
-  timerContainer: {
+  headerNavButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: theme.surfaceElevated,
+    justifyContent: "center",
     alignItems: "center",
-    minWidth: 80,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
-  timer: {
-    fontSize: 18,
-    fontWeight: "bold",
+  headerCenter: {
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
     color: theme.textPrimary,
   },
-  timerSubtext: {
+  questionCounter: {
     fontSize: 12,
     color: theme.textSecondary,
     marginTop: 2,
   },
-  pointsContainer: {
-    backgroundColor: theme.primary,
-    paddingVertical: 10,
+  timerContainer: {
+    flexDirection: "row",
     alignItems: "center",
+    backgroundColor: theme.surfaceElevated,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  timer: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  pointsBar: {
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  pointsBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   pointsText: {
     color: theme.textPrimary,
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: "600",
   },
   gameContent: {
     flex: 1,
@@ -718,26 +750,39 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   feedbackContainer: {
-    marginTop: 15,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    marginTop: 15,
     backgroundColor: theme.surfaceElevated,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.error,
+    borderColor: theme.border,
   },
   correctFeedbackContainer: {
-    borderColor: theme.success,
-    backgroundColor: theme.surfaceElevated,
+    borderColor: theme.success + "60",
+    backgroundColor: theme.success + "15",
+  },
+  incorrectFeedbackContainer: {
+    borderColor: theme.error + "60",
+    backgroundColor: theme.error + "15",
   },
   feedbackText: {
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 15,
+    fontWeight: "600",
     textAlign: "center",
   },
   resultContainer: {
     alignItems: "center",
+    paddingVertical: 20,
+  },
+  resultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
   },
   resultText: {
     fontSize: 20,
