@@ -15,57 +15,21 @@ import { FirebaseService } from '../firebase/gameService';
 import { useFirebase } from '../hooks/useFirebase';
 
 const DashboardScreen = ({ navigation }) => {
-  const { user, gameState, loading: firebaseLoading } = useFirebase();
-  const [userProfile, setUserProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user, userData, gameState, loading: firebaseLoading, logout } = useFirebase();
 
-  // Real-time listener for user profile (updates when qualified flag changes)
+  // Redirect to Login if no active user session
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
+    if (!firebaseLoading && !user) {
+      navigation.replace('Login');
     }
+  }, [user, firebaseLoading, navigation]);
 
-    console.log('DashboardScreen: Setting up real-time profile listener for user:', user.uid);
-    
-    // Subscribe to real-time updates
-    const unsubscribe = FirebaseService.subscribeToUser(user.uid, (data) => {
-      console.log('Profile updated via listener:', data);
-      setUserProfile(data);
-      setLoading(false);
-    });
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [user]);
-
-  const loadUserProfile = async () => {
-    if (user) {
-      console.log('Loading profile for user:', user.uid);
-      try {
-        const profile = await FirebaseService.getUserProfile(user.uid);
-        if (profile.success) {
-          console.log('Profile loaded successfully:', profile.data);
-          setUserProfile(profile.data);
-        } else {
-          console.log('Failed to load profile:', profile.error);
-        }
-      } catch (error) {
-        console.error('Error loading user profile:', error);
-      }
-    } else {
-      console.log('No user found, skipping profile load');
-    }
-    setLoading(false);
-  };
+  const userProfile = userData || user;
 
   const handleLogout = async () => {
     Alert.alert(
       'Logout',
-      'Are you sure you want to logout?',
+      'Are you sure you want to leave this team session?',
       [
         {
           text: 'Cancel',
@@ -74,8 +38,12 @@ const DashboardScreen = ({ navigation }) => {
         {
           text: 'Logout',
           onPress: async () => {
-            await FirebaseService.signOut();
-            navigation.navigate('Login');
+            if (logout) {
+              await logout();
+            } else {
+              await FirebaseService.signOut();
+            }
+            navigation.replace('Login');
           },
         },
       ]
@@ -102,7 +70,7 @@ const DashboardScreen = ({ navigation }) => {
     }
   };
 
-  if (loading || firebaseLoading) {
+  if (firebaseLoading && !userProfile) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>

@@ -16,10 +16,14 @@ import {
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInAnonymously,
   signOut as firebaseSignOut,
   onAuthStateChanged,
 } from "firebase/auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db, auth } from "./config";
+
+const STORED_USER_KEY = "@arguemind_team_user";
 
 export class FirebaseService {
   // Authentication Methods - Only login for predefined users
@@ -123,11 +127,100 @@ export class FirebaseService {
     }
   }
 
+  static async loginWithTeamName(teamName) {
+    try {
+      const trimmedName = teamName ? teamName.trim() : "";
+      if (!trimmedName) {
+        return { success: false, error: "Please enter a valid team name." };
+      }
+
+      // Generate a clean, deterministic document ID for this team
+      const sanitizedSlug = trimmedName
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 50);
+      const teamId = "team_" + (sanitizedSlug || Date.now().toString());
+
+      const userRef = doc(db, "users", teamId);
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        const userData = {
+          uid: teamId,
+          teamName: trimmedName,
+          round1Score: 0,
+          round2Score: 0,
+          totalScore: 0,
+          round1Rank: null,
+          round2Rank: null,
+          finalRank: null,
+          qualified: false,
+          isAdmin: false,
+          createdAt: serverTimestamp(),
+          lastActive: serverTimestamp(),
+        };
+        await setDoc(userRef, userData);
+        console.log("Created new team:", trimmedName, "(ID:", teamId, ")");
+      } else {
+        await updateDoc(userRef, {
+          lastActive: serverTimestamp(),
+          teamName: trimmedName,
+        });
+        console.log("Logged into existing team:", trimmedName, "(ID:", teamId, ")");
+      }
+
+      // Attempt anonymous Firebase auth in the background to satisfy any auth rules if needed
+      try {
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
+      } catch (authError) {
+        console.log("Anonymous auth skipped or not required:", authError?.message);
+      }
+
+      const teamUser = {
+        uid: teamId,
+        teamName: trimmedName,
+      };
+
+      // Persist in local storage
+      await AsyncStorage.setItem(STORED_USER_KEY, JSON.stringify(teamUser));
+
+      return { success: true, user: teamUser };
+    } catch (error) {
+      console.error("loginWithTeamName error:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  static async getStoredUser() {
+    try {
+      const jsonValue = await AsyncStorage.getItem(STORED_USER_KEY);
+      return jsonValue != null ? JSON.parse(jsonValue) : null;
+    } catch (error) {
+      console.error("Error reading stored user:", error);
+      return null;
+    }
+  }
+
+  static async clearStoredUser() {
+    try {
+      await AsyncStorage.removeItem(STORED_USER_KEY);
+    } catch (error) {
+      console.error("Error clearing stored user:", error);
+    }
+  }
+
   static async signOut() {
     try {
-      await firebaseSignOut(auth);
+      await this.clearStoredUser();
+      if (auth.currentUser) {
+        await firebaseSignOut(auth);
+      }
       return { success: true };
     } catch (error) {
+      console.error("Error during signOut:", error);
       return { success: false, error: error.message };
     }
   }
@@ -337,36 +430,35 @@ export class FirebaseService {
     return result;
   }
 
-  static async nextQuestion(round) {
+  static async nextQuestion(round, targetQuestion = null) {
     try {
-      const gameRef = doc(db, "gameState", "current");
-      const gameDoc = await getDoc(gameRef);
+      // Stop current timer first
+      this.stopTimer();
 
-      if (gameDoc.exists()) {
-        const gameData = gameDoc.data();
-        const currentQuestion = gameData.currentQuestion + 1;
+      let currentQuestion = targetQuestion;
+      if (!currentQuestion) {
+        const gameRef = doc(db, "gameState", "current");
+        const gameDoc = await getDoc(gameRef);
 
-        // Stop current timer first
-        this.stopTimer();
-
-        // Update game state - Reset timer but don't start it automatically
-        const result = await this.updateGameState({
-          currentQuestion: currentQuestion,
-          timerActive: false,
-          timeRemaining: 90,
-          timerStartTime: null,
-          round2BuzzerActive: false,
-          round2QuestionActive:
-            round === 2 ? false : gameData.round2QuestionActive,
-        });
-
-        // DO NOT auto-start timer - let admin control when to start
-        // Admin needs to manually click "Start Timer" for each question
-
-        return result;
+        if (gameDoc.exists()) {
+          const gameData = gameDoc.data();
+          currentQuestion = (gameData.currentQuestion || 1) + 1;
+        } else {
+          currentQuestion = 2;
+        }
       }
 
-      return { success: false, error: "Game state not found" };
+      // Update game state - Reset timer but don't start it automatically
+      const result = await this.updateGameState({
+        currentQuestion: currentQuestion,
+        timerActive: false,
+        timeRemaining: 90,
+        timerStartTime: null,
+        round2BuzzerActive: false,
+        round2QuestionActive: false,
+      });
+
+      return result;
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -506,26 +598,20 @@ export class FirebaseService {
   }
 
   // OPTIMIZED: Submit final Round 1 score (SINGLE WRITE instead of 20 writes)
-  static async submitFinalRound1Score(userId, totalScore, answersData) {
+  static async submitFinalRound1Score(userId, totalScore) {
     try {
       const userRef = doc(db, "users", userId);
       
-      // Get current user data to calculate new totalScore
-      const userDoc = await getDoc(userRef);
-      const userData = userDoc.exists() ? userDoc.data() : {};
-      const round2Score = userData.round2Score || 0;
-      const newTotalScore = totalScore + round2Score;
-
-      // Single write with all Round 1 data
+      // Single direct write with final Round 1 score (no redundant getDoc read)
       await updateDoc(userRef, {
         round1Score: totalScore,
-        totalScore: newTotalScore,
+        totalScore: totalScore,
         round1Completed: true,
         lastUpdated: serverTimestamp(),
       });
 
       console.log(
-        `✅ Final Round 1 score saved: ${totalScore} points, Total: ${newTotalScore} (1 write only)`
+        `✅ Final Round 1 score saved: ${totalScore} points (1 write only)`
       );
       return { success: true };
     } catch (error) {
@@ -611,12 +697,13 @@ export class FirebaseService {
     }
   }
 
-  // Buzzer System
-  static async pressBuzzer(userId, questionNumber, responseTime) {
+  // Buzzer System - teamName included directly to eliminate separate profile reads
+  static async pressBuzzer(userId, teamName, questionNumber, responseTime) {
     try {
       const buzzerRef = collection(db, "buzzerResponses");
       await addDoc(buzzerRef, {
         userId: userId,
+        teamName: teamName || "Team",
         questionNumber: questionNumber,
         responseTime: responseTime,
         timestamp: serverTimestamp(),

@@ -25,67 +25,38 @@ const AdminPanel = ({ navigation }) => {
 
   useEffect(() => {
     loadParticipants();
-    if (gameState) {
-      setSelectedRound(gameState.currentRound || 1);
+  }, []);
+
+  useEffect(() => {
+    if (gameState?.currentRound) {
+      setSelectedRound(gameState.currentRound);
     }
-  }, [gameState]);
+  }, [gameState?.currentRound]);
 
   useEffect(() => {
     // Subscribe to buzzer responses for current question in Round 2
     if (selectedRound === 2 && gameState?.currentQuestion) {
-      console.log('[AdminPanel] Subscribing to buzzer responses for question:', gameState.currentQuestion);
-      console.log('[AdminPanel] GameState:', {
-        round2Active: gameState.round2Active,
-        round2BuzzerActive: gameState.round2BuzzerActive,
-        currentQuestion: gameState.currentQuestion
-      });
-      
       const unsubscribe = FirebaseService.subscribeToBuzzerResponses(
         gameState.currentQuestion,
-        async (responses) => {
-          console.log('[AdminPanel] Received buzzer responses:', responses.length);
-          console.log('[AdminPanel] Raw responses:', JSON.stringify(responses, null, 2));
-          
-          if (responses.length === 0) {
-            console.log('[AdminPanel] No responses yet');
+        (responses) => {
+          if (!responses || responses.length === 0) {
             setBuzzerResponses([]);
             return;
           }
           
-          // Fetch user details for each response
-          try {
-            const responsesWithDetails = await Promise.all(
-              responses.map(async (response) => {
-                try {
-                  const userResult = await FirebaseService.getUserProfile(response.userId);
-                  return {
-                    ...response,
-                    teamName: userResult.success ? userResult.data.teamName : 'Unknown Team'
-                  };
-                } catch (error) {
-                  console.error('[AdminPanel] Error fetching user profile for:', response.userId, error);
-                  return {
-                    ...response,
-                    teamName: 'Unknown Team'
-                  };
-                }
-              })
-            );
-            
-            console.log('[AdminPanel] Buzzer responses with team names:', responsesWithDetails.length);
-            setBuzzerResponses(responsesWithDetails);
-          } catch (error) {
-            console.error('[AdminPanel] Error processing buzzer responses:', error);
-            setBuzzerResponses([]);
-          }
+          // teamName is now stored directly in the response document
+          const responsesWithDetails = responses.map((response) => ({
+            ...response,
+            teamName: response.teamName || 'Unknown Team',
+          }));
+          
+          setBuzzerResponses(responsesWithDetails);
         }
       );
       return () => {
-        console.log('[AdminPanel] Unsubscribing from buzzer responses');
         unsubscribe();
       };
     } else {
-      console.log('[AdminPanel] Clearing buzzer responses - selectedRound:', selectedRound, 'currentQuestion:', gameState?.currentQuestion);
       setBuzzerResponses([]);
     }
   }, [selectedRound, gameState?.currentQuestion]);
@@ -103,13 +74,10 @@ const AdminPanel = ({ navigation }) => {
         // Get qualified participants for Round 2 (top N from Round 1)
         const qualified = allParticipants
           .filter(user => user.round1Score > 0)
-          .sort((a, b) => b.round1Score - a.round1Score)
+          .sort((a, b) => (b.round1Score || 0) - (a.round1Score || 0))
           .slice(0, qualifiedCount);
         
         setQualifiedParticipants(qualified);
-        
-        // Update qualification status in Firebase
-        await FirebaseService.updateQualifiedUsers(qualified.map(u => u.uid));
       }
     } catch (error) {
       console.error('Error loading participants:', error);
@@ -140,7 +108,7 @@ const AdminPanel = ({ navigation }) => {
     }
     
     try {
-      const result = await FirebaseService.nextQuestion(1);
+      const result = await FirebaseService.nextQuestion(1, nextQuestion);
       if (!result.success) {
         console.error('Failed to update question:', result.error);
       }
@@ -211,7 +179,7 @@ const AdminPanel = ({ navigation }) => {
         return;
       }
       
-      const result = await FirebaseService.nextQuestion(2);
+      const result = await FirebaseService.nextQuestion(2, nextQuestion);
       if (!result.success) {
         console.error('Failed to update question:', result.error);
       }

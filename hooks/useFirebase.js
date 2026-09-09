@@ -1,75 +1,100 @@
 import { useState, useEffect } from 'react';
 import { FirebaseService } from '../firebase/gameService';
 
-// Authentication hook with enhanced cleanup for Samsung devices
+// Global user state management for immediate synchronization across screens
+let globalUser = null;
+const globalListeners = new Set();
+
+export const setGlobalAuthUser = (user) => {
+  globalUser = user;
+  globalListeners.forEach((cb) => {
+    try {
+      cb(user);
+    } catch (e) {
+      console.error(e);
+    }
+  });
+};
+
+// Authentication hook for team sessions
 export const useAuth = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(globalUser);
+  const [loading, setLoading] = useState(!globalUser);
   const [userData, setUserData] = useState(null);
 
   useEffect(() => {
-    let unsubscribeAuth = null;
     let unsubscribeUser = null;
     let isMounted = true;
 
-    try {
-      unsubscribeAuth = FirebaseService.onAuthStateChanged((firebaseUser) => {
-        if (!isMounted) return;
-
-        console.log('Auth state changed:', firebaseUser ? 'user found' : 'no user');
-        setUser(firebaseUser);
-        setLoading(false);
-        
-        if (firebaseUser) {
-          // Clean up previous user subscription
-          if (unsubscribeUser) {
-            try {
-              unsubscribeUser();
-            } catch (error) {
-              console.error('Error cleaning up previous user subscription:', error);
-            }
-          }
-
-          // Subscribe to user data from Firestore
-          unsubscribeUser = FirebaseService.subscribeToUser(firebaseUser.uid, (data) => {
-            if (isMounted) {
-              console.log('User data updated:', data);
-              setUserData(data);
-            }
-          });
-        } else {
-          if (isMounted) {
-            setUserData(null);
-          }
-        }
-      });
-    } catch (error) {
-      console.error('Error setting up auth listener:', error);
-      if (isMounted) {
-        setLoading(false);
+    const handleUserChange = (newUser) => {
+      if (!isMounted) return;
+      setUser(newUser);
+      
+      // Clean up existing Firestore user subscription
+      if (unsubscribeUser) {
+        unsubscribeUser();
+        unsubscribeUser = null;
       }
+
+      if (newUser?.uid) {
+        unsubscribeUser = FirebaseService.subscribeToUser(newUser.uid, (data) => {
+          if (isMounted) {
+            setUserData(data);
+          }
+        });
+      } else {
+        setUserData(null);
+      }
+    };
+
+    // Register listener for user updates
+    globalListeners.add(handleUserChange);
+
+    // Initial check from storage if not already loaded in memory
+    if (!globalUser) {
+      FirebaseService.getStoredUser().then((stored) => {
+        if (!isMounted) return;
+        if (stored) {
+          setGlobalAuthUser(stored);
+        }
+        setLoading(false);
+      }).catch((err) => {
+        console.error('Error loading stored user:', err);
+        if (isMounted) setLoading(false);
+      });
+    } else {
+      handleUserChange(globalUser);
+      setLoading(false);
     }
 
     return () => {
       isMounted = false;
-      if (unsubscribeAuth) {
-        try {
-          unsubscribeAuth();
-        } catch (error) {
-          console.error('Error unsubscribing from auth:', error);
-        }
-      }
+      globalListeners.delete(handleUserChange);
       if (unsubscribeUser) {
-        try {
-          unsubscribeUser();
-        } catch (error) {
-          console.error('Error unsubscribing from user data:', error);
-        }
+        unsubscribeUser();
       }
     };
   }, []);
 
-  return { user, userData, loading };
+  const loginWithTeam = async (teamName) => {
+    setLoading(true);
+    const result = await FirebaseService.loginWithTeamName(teamName);
+    if (result.success) {
+      setGlobalAuthUser(result.user);
+    }
+    setLoading(false);
+    return result;
+  };
+
+  const logout = async () => {
+    setLoading(true);
+    await FirebaseService.signOut();
+    setGlobalAuthUser(null);
+    setUserData(null);
+    setLoading(false);
+  };
+
+  return { user, userData, loading, loginWithTeam, logout };
 };
 
 // Game state hook with enhanced error handling for Samsung devices
@@ -160,13 +185,15 @@ export const useRound2 = () => {
 
 // Main Firebase hook (combines auth and game state)
 export const useFirebase = () => {
-  const { user, userData, loading: authLoading } = useAuth();
+  const { user, userData, loading: authLoading, loginWithTeam, logout } = useAuth();
   const { gameState, loading: gameLoading } = useGameState();
 
   return {
     user,
     userData,
     gameState,
-    loading: authLoading || gameLoading
+    loading: authLoading || gameLoading,
+    loginWithTeam,
+    logout,
   };
 };

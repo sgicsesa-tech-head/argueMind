@@ -16,7 +16,7 @@ import { useFirebase } from "../hooks/useFirebase";
 
 const GameScreen = ({ navigation, route }) => {
   const { roundNumber } = route.params || { roundNumber: 1 };
-  const { user, gameState, loading: firebaseLoading } = useFirebase();
+  const { user, userData, gameState, loading: firebaseLoading } = useFirebase();
 
   // Constants
   const TIMER_DURATION = 90; // 90 seconds
@@ -31,8 +31,8 @@ const GameScreen = ({ navigation, route }) => {
   const [showFeedback, setShowFeedback] = useState(false);
   const [lastSubmittedAnswer, setLastSubmittedAnswer] = useState("");
   const [submissionResult, setSubmissionResult] = useState(null); // 'correct', 'incorrect', or null
-  const [userProfile, setUserProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const userProfile = userData || user;
+  const [loading, setLoading] = useState(false);
 
   // LOCAL SCORE TRACKING - Only write to Firebase at end of round
   const [localAnswers, setLocalAnswers] = useState({}); // { questionId: { answer, isCorrect, points, timeRemaining } }
@@ -52,12 +52,12 @@ const GameScreen = ({ navigation, route }) => {
     loadQuestionsData();
   }, []);
 
-  // Load user profile and set up real-time listeners
+  // Sync user initial score if available
   useEffect(() => {
-    if (user) {
-      loadUserProfile();
+    if (userData?.round1Score) {
+      setUserPoints(userData.round1Score);
     }
-  }, [user]);
+  }, [userData?.round1Score]);
 
   // Listen to game state changes for question updates
   useEffect(() => {
@@ -80,7 +80,7 @@ const GameScreen = ({ navigation, route }) => {
       }
 
       // Check if Round 1 ended - submit final score
-      if (gameState.currentRound === 2 && !hasSubmittedFinalScore && !gameState.round1Active && isMounted) {
+      if ((gameState.currentRound === 2 || !gameState.round1Active) && !hasSubmittedFinalScore && isMounted) {
         submitFinalRound1Score();
       }
     }
@@ -88,7 +88,6 @@ const GameScreen = ({ navigation, route }) => {
     // Cleanup function to prevent memory leaks on Samsung devices
     return () => {
       isMounted = false;
-      console.log("GameScreen effect cleanup - preventing state updates after unmount");
     };
   }, [gameState?.currentQuestion, gameState?.currentRound, gameState?.round1Active, questionsData, hasSubmittedFinalScore]);
 
@@ -170,19 +169,7 @@ const GameScreen = ({ navigation, route }) => {
     }
   };
 
-  const loadUserProfile = async () => {
-    try {
-      const profile = await FirebaseService.getUserProfile(user.uid);
-      if (profile.success) {
-        setUserProfile(profile.data);
-        setUserPoints(profile.data.round1Score || 0);
-      }
-    } catch (error) {
-      console.error("Error loading user profile:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   const getCurrentQuestionData = () => {
     // Return current question from state, or fallback to first question from data

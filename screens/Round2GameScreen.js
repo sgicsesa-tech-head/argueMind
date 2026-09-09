@@ -14,21 +14,17 @@ import { FirebaseService } from '../firebase/gameService';
 import { useFirebase } from '../hooks/useFirebase';
 
 const Round2GameScreen = ({ navigation, route }) => {
-  const { user, gameState } = useFirebase();
+  const { user, userData, gameState } = useFirebase();
   
   // Game state
-  const [userProfile, setUserProfile] = useState(null);
+  const userProfile = userData || user;
   const [hasBuzzed, setHasBuzzed] = useState(false);
   const [buzzerTime, setBuzzerTime] = useState(null);
   const [questionStartTime, setQuestionStartTime] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const loading = false;
   
   // Buzzer rankings (real-time from Firebase)
   const [buzzerRankings, setBuzzerRankings] = useState([]);
-
-  useEffect(() => {
-    loadUserProfile();
-  }, [user]);
 
   useEffect(() => {
     // Subscribe to buzzer responses for current question
@@ -75,20 +71,6 @@ const Round2GameScreen = ({ navigation, route }) => {
     }
   }, [gameState?.round2BuzzerActive]);
 
-  const loadUserProfile = async () => {
-    if (user) {
-      try {
-        const profile = await FirebaseService.getUserProfile(user.uid);
-        if (profile.success) {
-          setUserProfile(profile.data);
-        }
-      } catch (error) {
-        console.error('Error loading user profile:', error);
-      }
-    }
-    setLoading(false);
-  };
-
   const handleBuzzer = async () => {
     if (!gameState?.round2BuzzerActive || hasBuzzed) return;
     
@@ -98,8 +80,10 @@ const Round2GameScreen = ({ navigation, route }) => {
     Vibration.vibrate(100);
     
     try {
+      const currentTeamName = userProfile?.teamName || user?.teamName || 'Team';
       const result = await FirebaseService.pressBuzzer(
         user.uid,
+        currentTeamName,
         gameState.currentQuestion,
         responseTime
       );

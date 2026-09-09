@@ -16,14 +16,26 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.csesa.arguemind",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "VIBRATE"
+      ],
       "edgeToEdgeEnabled": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d135a7e3-4d69-4a14-9fcb-9eedd14bd7a2"
+      }
     }
   }
 }

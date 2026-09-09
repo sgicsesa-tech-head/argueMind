@@ -14,11 +14,11 @@ import { useFirebase } from '../hooks/useFirebase';
 
 const StandingsScreen = ({ navigation, route }) => {
   const { round = 1, isAdmin = false } = route.params || {};
-  const { user } = useFirebase();
+  const { user, userData } = useFirebase();
   const [standings, setStandings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [userProfile, setUserProfile] = useState(null);
+  const userProfile = userData || user;
 
   useEffect(() => {
     // Subscribe to real-time updates for standings with the appropriate round
@@ -27,11 +27,6 @@ const StandingsScreen = ({ navigation, route }) => {
       setLoading(false);
       setRefreshing(false);
     });
-
-    // Load the current user's profile separately
-    if (user && !isAdmin) {
-      loadUserProfile();
-    }
 
     // Cleanup subscription on unmount
     return () => unsubscribe();
@@ -64,37 +59,16 @@ const StandingsScreen = ({ navigation, route }) => {
     setStandings(rankedUsers);
   };
 
-  const loadUserProfile = async () => {
-    if (user) {
-      try {
-        const profile = await FirebaseService.getUserProfile(user.uid);
-        if (profile.success) {
-          setUserProfile(profile.data);
-        }
-      } catch (error) {
-        console.error('Error loading user profile:', error);
-      }
-    }
-  };
-
   const handleRefreshStandings = async () => {
     setRefreshing(true);
     try {
-      // Force re-fetch from Firestore and update qualifications
+      // Force re-fetch from Firestore (NO auto-qualification - admin manages manually)
       const result = await FirebaseService.getAllUsers();
       if (result.success) {
         const nonAdminUsers = result.users.filter(u => !u.isAdmin);
+        processStandings(nonAdminUsers);
         
-        // If this is Round 1 standings, calculate and update qualifications
-        if (round === 1 && isAdmin) {
-          await FirebaseService.updateQualificationsBasedOnRound1Scores(nonAdminUsers);
-        }
-        
-        // Fetch updated data after qualification update
-        const updatedResult = await FirebaseService.getAllUsers();
-        if (updatedResult.success) {
-          processStandings(updatedResult.users.filter(u => !u.isAdmin));
-        }
+        console.log('✅ Standings refreshed (qualifications preserved - admin controlled)');
       }
     } catch (error) {
       console.error('Error refreshing standings:', error);
