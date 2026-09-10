@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Image,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -29,7 +30,16 @@ const LoginScreen = ({ navigation }) => {
   // Auto-restore saved session
   useEffect(() => {
     let isMounted = true;
-    FirebaseService.getStoredUser()
+    
+    // Check for active admin session first
+    FirebaseService.getAdminSession()
+      .then((isAdmin) => {
+        if (isMounted && isAdmin) {
+          navigation.replace("Admin");
+          return null;
+        }
+        return FirebaseService.getStoredUser();
+      })
       .then((storedUser) => {
         if (isMounted && storedUser?.teamName) {
           setGlobalAuthUser(storedUser);
@@ -76,11 +86,12 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
-  const handleAdminLogin = () => {
+  const handleAdminLogin = async () => {
     if (adminPassword === "arguemind") {
       setShowAdminMode(false);
       setAdminPassword("");
-      navigation.navigate("Admin");
+      await FirebaseService.setAdminSession(true);
+      navigation.replace("Admin");
     } else {
       Alert.alert("Access Denied", "Incorrect admin passcode.");
     }
@@ -99,11 +110,16 @@ const LoginScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardView}
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContentContainer}
+        keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.innerContainer}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardView}
+        >
+          <View style={styles.innerContainer}>
           {/* Header & Logo */}
           <View style={styles.brandContainer}>
             <View style={styles.logoWrapper}>
@@ -240,8 +256,9 @@ const LoginScreen = ({ navigation }) => {
           </View>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+    </ScrollView>
+  </SafeAreaView>
+);
 };
 
 const styles = StyleSheet.create({
@@ -249,8 +266,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.background,
   },
+  scrollContainer: {
+    flex: 1,
+    width: "100%",
+  },
+  scrollContentContainer: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
   keyboardView: {
     flex: 1,
+    justifyContent: "center",
   },
   loadingCenter: {
     flex: 1,

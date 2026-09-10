@@ -7,6 +7,7 @@ import {
   Alert,
   Vibration,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -150,132 +151,138 @@ const Round2GameScreen = ({ navigation, route }) => {
         <View style={styles.headerPlaceholder} />
       </View>
       
-      {/* Points Display */}
-      <View style={styles.pointsBar}>
-        <View style={styles.pointsBadge}>
-          <Ionicons name="flash" size={14} color={theme.warning} style={{ marginRight: 6 }} />
-          <Text style={styles.pointsText}>
-            R2 Score: {userProfile?.round2Score || 0} pts
-          </Text>
+      {/* Scrollable Content */}
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContentContainer}
+        showsVerticalScrollIndicator={true}
+      >
+        {/* Points Display */}
+        <View style={styles.pointsBar}>
+          <View style={styles.pointsBadge}>
+            <Ionicons name="flash" size={14} color={theme.warning} style={{ marginRight: 6 }} />
+            <Text style={styles.pointsText}>
+              R2 Score: {userProfile?.round2Score || 0} pts
+            </Text>
+          </View>
         </View>
-      </View>
-      
-      {/* Question Display */}
-      <View style={styles.questionContainer}>
-        <Text style={styles.questionTitle}>
-          Buzzer Question {gameState?.currentQuestion || 1}
-        </Text>
-        {gameState?.round2QuestionActive ? (
-          <Text style={styles.questionInstruction}>
-            Listen closely to the speaker.{'\n'}
-            Hit the buzzer as fast as possible when active!
-          </Text>
-        ) : (
-          <Text style={styles.questionInstructionWaiting}>
-            Waiting for host to present the question...
-          </Text>
-        )}
-      </View>
-      
-      {/* Buzzer Section */}
-      <View style={styles.buzzerSection}>
-        <TouchableOpacity
-          style={[
-            styles.buzzerButton,
-            { backgroundColor: getBuzzerButtonColor() }
-          ]}
-          onPress={handleBuzzer}
-          disabled={!gameState?.round2BuzzerActive || hasBuzzed}
-          activeOpacity={0.85}
-        >
-          <Ionicons
-            name={hasBuzzed ? "checkmark-circle" : "flash"}
-            size={40}
-            color={theme.textPrimary}
-            style={{ marginBottom: 4 }}
-          />
-          <Text style={styles.buzzerButtonText}>
-            {getBuzzerButtonText()}
-          </Text>
-        </TouchableOpacity>
         
-        {buzzerTime && (
-          <View style={styles.responseTimeBadge}>
-            <Ionicons name="speedometer-outline" size={14} color={theme.accent} style={{ marginRight: 6 }} />
-            <Text style={styles.responseTimeText}>
-              Response: {buzzerTime} ms
+        {/* Question Display */}
+        <View style={styles.questionContainer}>
+          <Text style={styles.questionTitle}>
+            Buzzer Question {gameState?.currentQuestion || 1}
+          </Text>
+          {gameState?.round2QuestionActive ? (
+            <Text style={styles.questionInstruction}>
+              Listen closely to the speaker.{'\n'}
+              Hit the buzzer as fast as possible when active!
             </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Status Display */}
-      <View style={styles.statusContainer}>
-        {!gameState?.round2QuestionActive && (
-          <Text style={styles.statusText}>
-            Waiting for host to begin question...
-          </Text>
-        )}
-        
-        {gameState?.round2QuestionActive && !gameState?.round2BuzzerActive && !hasBuzzed && (
-          <Text style={styles.statusText}>
-            Question active — Get ready for buzzer unlock...
-          </Text>
-        )}
-        
-        {gameState?.round2BuzzerActive && !hasBuzzed && (
-          <View style={styles.activeStatusRow}>
-            <Ionicons name="flash" size={18} color={theme.warning} style={{ marginRight: 6 }} />
-            <Text style={styles.statusTextActive}>
-              BUZZER UNLOCKED — Hit to answer!
+          ) : (
+            <Text style={styles.questionInstructionWaiting}>
+              Waiting for host to present the question...
             </Text>
-          </View>
-        )}
+          )}
+        </View>
         
-        {hasBuzzed && (
-          <Text style={styles.statusText}>
-            Buzzed in! Waiting for host evaluation...
-          </Text>
-        )}
-      </View>
-
-      {/* Buzzer Rankings (if any) */}
-      {buzzerRankings.length > 0 && (
-        <View style={styles.rankingsContainer}>
-          <Text style={styles.rankingsTitle}>Buzzer Order:</Text>
-          {buzzerRankings.map((ranking, index) => (
-            <View 
-              key={ranking.id || index} 
-              style={[
-                styles.rankingItem,
-                ranking.userId === user?.uid && styles.currentUserRanking
-              ]}
-            >
-              <Text style={styles.rankingPosition}>#{index + 1}</Text>
-              <Text style={styles.rankingName} numberOfLines={1}>
-                {ranking.userId === user?.uid ? 'You' : (ranking.teamName || `Team ${index + 1}`)}
+        {/* Buzzer Section */}
+        <View style={styles.buzzerSection}>
+          <TouchableOpacity
+            style={[
+              styles.buzzerButton,
+              { backgroundColor: getBuzzerButtonColor() }
+            ]}
+            onPress={handleBuzzer}
+            disabled={!gameState?.round2BuzzerActive || hasBuzzed}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name={hasBuzzed ? "checkmark-circle" : "flash"}
+              size={40}
+              color={theme.textPrimary}
+              style={{ marginBottom: 4 }}
+            />
+            <Text style={styles.buzzerButtonText}>
+              {getBuzzerButtonText()}
+            </Text>
+          </TouchableOpacity>
+          
+          {buzzerTime && (
+            <View style={styles.responseTimeBadge}>
+              <Ionicons name="speedometer-outline" size={14} color={theme.accent} style={{ marginRight: 6 }} />
+              <Text style={styles.responseTimeText}>
+                Response: {buzzerTime} ms
               </Text>
-              <Text style={styles.rankingTime}>{ranking.responseTime}ms</Text>
-              {ranking.scored && (
-                <Text style={[
-                  styles.rankingPoints,
-                  { color: ranking.points > 0 ? theme.success : ranking.points < 0 ? theme.error : theme.textMuted }
-                ]}>
-                  {ranking.points > 0 ? `+${ranking.points}` : ranking.points}
-                </Text>
-              )}
             </View>
-          ))}
+          )}
         </View>
-      )}
 
-      {/* Back Button */}
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBackToDashboard}>
-          <Text style={styles.backButtonText}>Back to Dashboard</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Status Display */}
+        <View style={styles.statusContainer}>
+          {!gameState?.round2QuestionActive && (
+            <Text style={styles.statusText}>
+              Waiting for host to begin question...
+            </Text>
+          )}
+          
+          {gameState?.round2QuestionActive && !gameState?.round2BuzzerActive && !hasBuzzed && (
+            <Text style={styles.statusText}>
+              Question active — Get ready for buzzer unlock...
+            </Text>
+          )}
+          
+          {gameState?.round2BuzzerActive && !hasBuzzed && (
+            <View style={styles.activeStatusRow}>
+              <Ionicons name="flash" size={18} color={theme.warning} style={{ marginRight: 6 }} />
+              <Text style={styles.statusTextActive}>
+                BUZZER UNLOCKED — Hit to answer!
+              </Text>
+            </View>
+          )}
+          
+          {hasBuzzed && (
+            <Text style={styles.statusText}>
+              Buzzed in! Waiting for host evaluation...
+            </Text>
+          )}
+        </View>
 
+        {/* Buzzer Rankings (if any) */}
+        {buzzerRankings.length > 0 && (
+          <View style={styles.rankingsContainer}>
+            <Text style={styles.rankingsTitle}>Buzzer Order:</Text>
+            {buzzerRankings.map((ranking, index) => (
+              <View 
+                key={ranking.id || index} 
+                style={[
+                  styles.rankingItem,
+                  ranking.userId === user?.uid && styles.currentUserRanking
+                ]}
+              >
+                <Text style={styles.rankingPosition}>#{index + 1}</Text>
+                <Text style={styles.rankingName} numberOfLines={1}>
+                  {ranking.userId === user?.uid ? 'You' : (ranking.teamName || `Team ${index + 1}`)}
+                </Text>
+                <Text style={styles.rankingTime}>{ranking.responseTime}ms</Text>
+                {ranking.scored && (
+                  <Text style={[
+                    styles.rankingPoints,
+                    { color: ranking.points > 0 ? theme.success : ranking.points < 0 ? theme.error : theme.textMuted }
+                  ]}>
+                    {ranking.points > 0 ? `+${ranking.points}` : ranking.points}
+                  </Text>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Back Button */}
+        <View style={styles.footer}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBackToDashboard}>
+            <Text style={styles.backButtonText}>Back to Dashboard</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -284,6 +291,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
+  },
+  scrollContainer: {
+    flex: 1,
+    width: "100%",
+  },
+  scrollContentContainer: {
+    flexGrow: 1,
+    paddingBottom: 40,
+    alignItems: "center",
+    width: "100%",
   },
   loadingContainer: {
     flex: 1,

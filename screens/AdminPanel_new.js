@@ -23,10 +23,60 @@ const AdminPanel = ({ navigation }) => {
   const [buzzerResponses, setBuzzerResponses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [resettingRound, setResettingRound] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Live Timer State for Admin View
+  const [timeLeft, setTimeLeft] = useState(90);
+  const [timerActive, setTimerActive] = useState(false);
 
   useEffect(() => {
     loadParticipants();
   }, []);
+
+  // Real-time countdown timer synchronized with Firestore timerStartTime
+  useEffect(() => {
+    let interval = null;
+    let isMounted = true;
+
+    if (gameState?.timerActive && gameState?.timerStartTime) {
+      const calculateTimeRemaining = () => {
+        const elapsed = Math.floor((Date.now() - gameState.timerStartTime) / 1000);
+        return Math.max(0, (gameState.timerDuration || 90) - elapsed);
+      };
+
+      if (isMounted) {
+        setTimeLeft(calculateTimeRemaining());
+        setTimerActive(true);
+      }
+
+      interval = setInterval(() => {
+        if (!isMounted) return;
+        const remaining = calculateTimeRemaining();
+        setTimeLeft(remaining);
+        if (remaining <= 0) {
+          setTimerActive(false);
+          if (interval) clearInterval(interval);
+        }
+      }, 1000);
+    } else {
+      if (isMounted) {
+        setTimeLeft(gameState?.timeRemaining || 90);
+        setTimerActive(false);
+      }
+    }
+
+    return () => {
+      isMounted = false;
+      if (interval) clearInterval(interval);
+    };
+  }, [gameState?.timerActive, gameState?.timerStartTime, gameState?.currentQuestion]);
+
+  // Auto-refresh participants when question changes
+  useEffect(() => {
+    if (gameState?.currentQuestion) {
+      loadParticipants();
+    }
+  }, [gameState?.currentQuestion]);
 
   useEffect(() => {
     if (gameState?.currentRound) {
@@ -87,12 +137,24 @@ const AdminPanel = ({ navigation }) => {
     }
   };
 
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadParticipants();
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   // Round 1 Handlers
   const handleStartRound1 = async () => {
     try {
       const result = await FirebaseService.enableRound1();
       if (result.success) {
-        Alert.alert('Round 1 Started', 'All participants can now see Question 1 with active timer!');
+        await FirebaseService.startTimer(90);
+        Alert.alert('Round 1 Started', 'All participants can now see Question 1 with active 90s timer!');
       } else {
         Alert.alert('Error', result.error || 'Failed to start Round 1');
       }
@@ -112,6 +174,10 @@ const AdminPanel = ({ navigation }) => {
       const result = await FirebaseService.nextQuestion(1, nextQuestion);
       if (!result.success) {
         console.error('Failed to update question:', result.error);
+        Alert.alert('Error', result.error || 'Failed to update question');
+      } else {
+        // Refresh participants to see current points and submissions
+        loadParticipants();
       }
     } catch (error) {
       console.error('Error updating question:', error);
@@ -392,6 +458,16 @@ const AdminPanel = ({ navigation }) => {
         </View>
         <View style={styles.headerButtons}>
           <TouchableOpacity 
+            style={[styles.refreshButton, refreshing && styles.disabledButton]}
+            onPress={handleManualRefresh}
+            disabled={refreshing}
+          >
+            <Ionicons name="refresh" size={16} color="#fff" style={{ marginRight: 4 }} />
+            <Text style={styles.refreshButtonText}>
+              {refreshing ? 'Updating...' : 'Refresh'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
             style={[styles.resetGameButton, resettingRound && styles.disabledButton]}
             onPress={handleResetGame}
             disabled={resettingRound}
@@ -402,14 +478,17 @@ const AdminPanel = ({ navigation }) => {
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.backButton}
-            onPress={() => navigation.navigate('Login')}
+            onPress={async () => {
+              await FirebaseService.clearAdminSession();
+              navigation.replace('Login');
+            }}
           >
             <Text style={styles.backButtonText}>Logout</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
         {/* Round Selector */}
         <View style={styles.roundSelector}>
           <TouchableOpacity 
@@ -490,12 +569,12 @@ const AdminPanel = ({ navigation }) => {
               <View style={styles.timerSection}>
                 <Text style={styles.timerTitle}>Timer Control</Text>
                 <View style={styles.timerInfo}>
-                  <Text style={[styles.timerText, { color: gameState?.timerActive ? '#27ae60' : '#e74c3c' }]}>
-                    {gameState?.timerActive ? 'Timer Active' : 'Timer Stopped'} • {gameState?.timeRemaining || 90}s remaining
+                  <Text style={[styles.timerText, { color: timerActive ? '#27ae60' : '#e74c3c' }]}>
+                    {timerActive ? 'Timer Active' : 'Timer Stopped'} • {timeLeft}s remaining
                   </Text>
                 </View>
                 <View style={styles.timerControls}>
-                  {!gameState?.timerActive ? (
+                  {!timerActive ? (
                     <TouchableOpacity 
                       style={styles.timerButton}
                       onPress={async () => {
@@ -796,7 +875,22 @@ const styles = StyleSheet.create({
   },
   headerButtons: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    gap: 8,
+  },
+  refreshButton: {
+    backgroundColor: theme.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    ...shadows.small,
+  },
+  refreshButtonText: {
+    color: theme.textPrimary,
+    fontSize: 12,
+    fontWeight: '600',
   },
   resetGameButton: {
     backgroundColor: '#e74c3c',
@@ -811,7 +905,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   backButton: {
-    backgroundColor: theme.error,
+    backgroundColor: theme.surfaceElevated,
+    borderWidth: 1,
+    borderColor: theme.border,
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 8,
@@ -825,6 +921,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
   },
   roundSelector: {
     flexDirection: 'row',

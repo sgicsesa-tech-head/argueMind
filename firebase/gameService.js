@@ -24,6 +24,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db, auth } from "./config";
 
 const STORED_USER_KEY = "@arguemind_team_user";
+const STORED_ADMIN_KEY = "@arguemind_admin_session";
 
 export class FirebaseService {
   // Authentication Methods - Only login for predefined users
@@ -209,6 +210,36 @@ export class FirebaseService {
       await AsyncStorage.removeItem(STORED_USER_KEY);
     } catch (error) {
       console.error("Error clearing stored user:", error);
+    }
+  }
+
+  static async setAdminSession(isAdmin = true) {
+    try {
+      if (isAdmin) {
+        await AsyncStorage.setItem(STORED_ADMIN_KEY, "true");
+      } else {
+        await AsyncStorage.removeItem(STORED_ADMIN_KEY);
+      }
+    } catch (error) {
+      console.error("Error setting admin session:", error);
+    }
+  }
+
+  static async getAdminSession() {
+    try {
+      const val = await AsyncStorage.getItem(STORED_ADMIN_KEY);
+      return val === "true";
+    } catch (error) {
+      console.error("Error getting admin session:", error);
+      return false;
+    }
+  }
+
+  static async clearAdminSession() {
+    try {
+      await AsyncStorage.removeItem(STORED_ADMIN_KEY);
+    } catch (error) {
+      console.error("Error clearing admin session:", error);
     }
   }
 
@@ -448,12 +479,14 @@ export class FirebaseService {
         }
       }
 
-      // Update game state - Reset timer but don't start it automatically
+      // Update game state - Reset timer and auto-start 90s countdown for Round 1
+      const isRound1 = round === 1;
       const result = await this.updateGameState({
         currentQuestion: currentQuestion,
-        timerActive: false,
+        timerActive: isRound1,
         timeRemaining: 90,
-        timerStartTime: null,
+        timerDuration: 90,
+        timerStartTime: isRound1 ? Date.now() : null,
         round2BuzzerActive: false,
         round2QuestionActive: false,
       });

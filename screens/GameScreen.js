@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  ScrollView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -48,6 +50,8 @@ const GameScreen = ({ navigation, route }) => {
   const [questionsData, setQuestionsData] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(null);
 
+  const inputRef = useRef(null);
+
   // Load questions data on mount
   useEffect(() => {
     loadQuestionsData();
@@ -78,6 +82,8 @@ const GameScreen = ({ navigation, route }) => {
         setShowFeedback(false);
         setSubmissionResult(null);
         setLastSubmittedAnswer("");
+        setShowResult(false);
+        setResultMessage("");
       }
 
       // Check if Round 1 ended - submit final score
@@ -157,42 +163,39 @@ const GameScreen = ({ navigation, route }) => {
     }
   };
 
-  const loadCurrentQuestion = async () => {
-    try {
-      if (gameState?.currentRound === 1) {
-        const result = await FirebaseService.getCurrentQuestion(1);
-        if (result.success) {
-          setCurrentQuestion(result.question);
-        }
+  const loadCurrentQuestion = () => {
+    const qNum = gameState?.currentQuestion || 1;
+    if (questionsData?.round1Questions?.length > 0) {
+      const q = questionsData.round1Questions.find((item) => item.id === qNum);
+      if (q) {
+        setCurrentQuestion(q);
+        return;
       }
-    } catch (error) {
-      console.error("Error loading current question:", error);
     }
   };
 
-
-
   const getCurrentQuestionData = () => {
-    // Return current question from state, or fallback to first question from data
+    const qNum = gameState?.currentQuestion || 1;
+    if (questionsData?.round1Questions?.length > 0) {
+      const q = questionsData.round1Questions.find((item) => item.id === qNum);
+      if (q) {
+        return {
+          ...q,
+          imageUrl: q.image,
+        };
+      }
+    }
+
     if (currentQuestion) {
       return {
         ...currentQuestion,
-        imageUrl: currentQuestion.image, // Map 'image' to 'imageUrl' for compatibility
-      };
-    }
-
-    // Fallback to first question if available
-    if (questionsData?.round1Questions?.length > 0) {
-      const fallback = questionsData.round1Questions[0];
-      return {
-        ...fallback,
-        imageUrl: fallback.image,
+        imageUrl: currentQuestion.image,
       };
     }
 
     // Default fallback
     return {
-      id: 1,
+      id: qNum,
       word: "LOADING",
       imageUrl:
         "https://via.placeholder.com/300x200/cccccc/000000?text=Loading...",
@@ -412,129 +415,143 @@ const GameScreen = ({ navigation, route }) => {
         </View>
       </View>
 
-      {/* Points Display */}
-      <View style={styles.pointsBar}>
-        <View style={styles.pointsBadge}>
-          <Ionicons name="star" size={14} color={theme.warning} style={{ marginRight: 6 }} />
-          <Text style={styles.pointsText}>{userPoints} pts</Text>
+      {/* Scrollable Content */}
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContentContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={true}
+      >
+        {/* Points Display */}
+        <View style={styles.pointsBar}>
+          <View style={styles.pointsBadge}>
+            <Ionicons name="star" size={14} color={theme.warning} style={{ marginRight: 6 }} />
+            <Text style={styles.pointsText}>{userPoints} pts</Text>
+          </View>
         </View>
-      </View>
 
-      {/* Game Content */}
-      <View style={styles.gameContent}>
-        {/* Interactive Word Display */}
-        <View style={styles.wordContainer}>
-          <View style={styles.interactiveWordContainer}>
-            {generateInteractiveWord().map((letterData, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.letterContainer,
-                  letterData.isCurrentPosition && styles.currentLetterContainer,
-                ]}
-              >
-                <Text
+        {/* Game Content */}
+        <View style={styles.gameContent}>
+          {/* Interactive Word Display - Tap to focus keyboard */}
+          <TouchableOpacity
+            activeOpacity={0.95}
+            onPress={() => inputRef.current?.focus()}
+            style={styles.wordContainer}
+          >
+            <View style={styles.interactiveWordContainer}>
+              {generateInteractiveWord().map((letterData, index) => (
+                <View
+                  key={index}
                   style={[
-                    styles.letterText,
-                    letterData.isCurrentPosition && styles.currentLetterText,
-                    letterData.showSubmissionFeedback &&
-                      letterData.hasInput &&
-                      (letterData.isSubmissionCorrect
-                        ? styles.correctLetter
-                        : styles.incorrectLetter),
+                    styles.letterContainer,
+                    letterData.isCurrentPosition && styles.currentLetterContainer,
                   ]}
                 >
-                  {letterData.userLetter || " "}
-                </Text>
+                  <Text
+                    style={[
+                      styles.letterText,
+                      letterData.isCurrentPosition && styles.currentLetterText,
+                      letterData.showSubmissionFeedback &&
+                        letterData.hasInput &&
+                        (letterData.isSubmissionCorrect
+                          ? styles.correctLetter
+                          : styles.incorrectLetter),
+                    ]}
+                  >
+                    {letterData.userLetter || " "}
+                  </Text>
+                  <View
+                    style={[
+                      styles.letterUnderline,
+                      letterData.isCurrentPosition && styles.currentUnderline,
+                      letterData.showSubmissionFeedback &&
+                        letterData.hasInput &&
+                        (letterData.isSubmissionCorrect
+                          ? styles.correctUnderline
+                          : styles.incorrectUnderline),
+                    ]}
+                  />
+                </View>
+              ))}
+            </View>
+          </TouchableOpacity>
+
+          {/* Input Field */}
+          {!showResult ? (
+            <View style={styles.inputContainer}>
+              <TextInput
+                key={`q-input-${gameState?.currentQuestion || 1}`}
+                ref={inputRef}
+                style={styles.answerInput}
+                placeholder={`Type your answer... (${currentQuestionData.word.length} letters)`}
+                placeholderTextColor={theme.placeholder}
+                value={userAnswer}
+                onChangeText={setUserAnswer}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                editable={!isAnswered && (timeLeft > 0 || !gameState?.timerActive)}
+                maxLength={currentQuestionData.word.length}
+              />
+
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  (isAnswered || (gameState?.timerActive && timeLeft === 0)) &&
+                    styles.disabledButton,
+                ]}
+                onPress={handleSubmit}
+                disabled={isAnswered || (gameState?.timerActive && timeLeft === 0)}
+              >
+                <Text style={styles.submitButtonText}>Submit</Text>
+              </TouchableOpacity>
+
+              {/* Show feedback messages */}
+              {(showFeedback || isAnswered) && resultMessage && (
                 <View
                   style={[
-                    styles.letterUnderline,
-                    letterData.isCurrentPosition && styles.currentUnderline,
-                    letterData.showSubmissionFeedback &&
-                      letterData.hasInput &&
-                      (letterData.isSubmissionCorrect
-                        ? styles.correctUnderline
-                        : styles.incorrectUnderline),
-                  ]}
-                />
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Input Field */}
-        {!showResult ? (
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.answerInput}
-              placeholder={`Type your answer... (${currentQuestionData.word.length} letters)`}
-              placeholderTextColor={theme.placeholder}
-              value={userAnswer}
-              onChangeText={setUserAnswer}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              editable={timeLeft > 0 && timerActive && !isAnswered}
-              maxLength={currentQuestionData.word.length}
-            />
-
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                (timeLeft === 0 || !timerActive || isAnswered) &&
-                  styles.disabledButton,
-              ]}
-              onPress={handleSubmit}
-              disabled={timeLeft === 0 || !timerActive || isAnswered}
-            >
-              <Text style={styles.submitButtonText}>Submit</Text>
-            </TouchableOpacity>
-
-            {/* Show feedback messages */}
-            {(showFeedback || isAnswered) && resultMessage && (
-              <View
-                style={[
-                  styles.feedbackContainer,
-                  isAnswered
-                    ? styles.correctFeedbackContainer
-                    : styles.incorrectFeedbackContainer,
-                ]}
-              >
-                <Ionicons
-                  name={isAnswered || resultMessage.includes("Correct") ? "checkmark-circle" : "close-circle"}
-                  size={18}
-                  color={isAnswered || resultMessage.includes("Correct") ? theme.success : theme.error}
-                  style={{ marginRight: 8 }}
-                />
-                <Text
-                  style={[
-                    styles.feedbackText,
-                    isAnswered || resultMessage.includes("Correct")
-                      ? styles.correctText
-                      : styles.incorrectText,
+                    styles.feedbackContainer,
+                    isAnswered
+                      ? styles.correctFeedbackContainer
+                      : styles.incorrectFeedbackContainer,
                   ]}
                 >
-                  {resultMessage}
-                </Text>
-              </View>
-            )}
-          </View>
-        ) : (
-          /* Result Display for correct answers - waiting state */
-          <View style={styles.resultContainer}>
-            <View style={styles.resultRow}>
-              <Ionicons name="checkmark-circle" size={22} color={theme.success} style={{ marginRight: 8 }} />
-              <Text style={styles.resultText}>{resultMessage}</Text>
+                  <Ionicons
+                    name={isAnswered || resultMessage.includes("Correct") ? "checkmark-circle" : "close-circle"}
+                    size={18}
+                    color={isAnswered || resultMessage.includes("Correct") ? theme.success : theme.error}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text
+                    style={[
+                      styles.feedbackText,
+                      isAnswered || resultMessage.includes("Correct")
+                        ? styles.correctText
+                        : styles.incorrectText,
+                    ]}
+                  >
+                    {resultMessage}
+                  </Text>
+                </View>
+              )}
             </View>
-            <Text style={styles.waitingText}>Waiting for next question...</Text>
-          </View>
-        )}
-      </View>
+          ) : (
+            /* Result Display for correct answers - waiting state */
+            <View style={styles.resultContainer}>
+              <View style={styles.resultRow}>
+                <Ionicons name="checkmark-circle" size={22} color={theme.success} style={{ marginRight: 8 }} />
+                <Text style={styles.resultText}>{resultMessage}</Text>
+              </View>
+              <Text style={styles.waitingText}>Waiting for next question...</Text>
+            </View>
+          )}
+        </View>
 
-      <View style={styles.adminInfo}>
-        <Text style={styles.adminInfoText}>
-          CSE Induction • Synchronized live session
-        </Text>
-      </View>
+        <View style={styles.adminInfo}>
+          <Text style={styles.adminInfoText}>
+            CSE Induction • Synchronized live session
+          </Text>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -629,9 +646,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
   },
+  scrollContainer: {
+    flex: 1,
+    width: "100%",
+  },
+  scrollContentContainer: {
+    flexGrow: 1,
+    paddingBottom: 40,
+    alignItems: "center",
+    width: "100%",
+  },
   pointsBar: {
     paddingVertical: 8,
     alignItems: "center",
+    width: "100%",
   },
   pointsBadge: {
     flexDirection: "row",
@@ -649,9 +677,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   gameContent: {
-    flex: 1,
+    width: "100%",
+    maxWidth: 600,
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingVertical: 10,
   },
   imageContainer: {
     alignItems: "center",
